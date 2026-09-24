@@ -1,0 +1,32 @@
+name: smoke
+
+# Builds the page and runs the clickable smoke tests on every push and pull
+# request. Vercel deploys independently of this; a red run here does not block
+# a deploy, so treat a failure as "the prototype broke", not "the site is down".
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Build
+        run: node build.mjs
+
+      - name: Smoke tests
+        run: node tests/smoke.js
