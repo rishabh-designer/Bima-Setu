@@ -25,16 +25,19 @@ That is the whole build. There is no bundler, no framework and no install step.
 ```bash
 npm install                        # playwright, for the tests only
 npx playwright install chromium
-npm test                           # build, then ~30 clickable assertions
+npm test                           # build, then the clickable smoke tests
 npm run shots                      # build, then 27 screenshots into shots/
 ```
 
-`npm test` drives the real page in a real browser: it signs in as each role,
-takes a product line from first contact to payment, verifies a renewal, opens
-documents, and checks that nothing throws. Two `ERR_TUNNEL_CONNECTION_FAILED`
-console lines are expected — that is the Google Fonts request failing in the
-sandbox, and it is harmless. The line `ERRORS` at the end is a section label,
-not a failure; look for lines beginning `FAIL`.
+`npm test` drives the real page in a real browser. It signs in as each person,
+takes the Workmen's Compensation line through Cholamandalam's real-time
+issuance (and the assisted and provisional-account variants), takes the Cyber
+line through its band-chosen RFQ to placement, checks website-lead priority,
+walks every screen and tab for every person, and fails on any `FAIL` line or
+any browser console error. Without network access the Google Fonts request
+fails and logs two console errors, so the run ends `ERRORS` and exits 1 even
+when nothing else is wrong — check for lines beginning `FAIL`. CI has network
+access, so it sees neither.
 
 ---
 
