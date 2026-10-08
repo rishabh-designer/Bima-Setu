@@ -6,7 +6,6 @@ var PERSONAS=[
  {id:'nikhil', d:'Owns a book of product lines. Home says what needs him. Works lines, raises tickets, creates opportunities.'},
  {id:'vikram', d:'Sees the whole team and acts on none of it. Closes escalated tasks, takes a line over when someone is away, edits task rules.'},
  {id:'priya',  d:'Owns accounts after the sale: chases the client for the proposal form and mandate, holds the relationship through issuance, raises endorsements and claims — and sells on her own accounts.'},
- {id:'rohan',  d:'The second RM. Same chair as Priya, a different book — so the head of RM has a team to look at.'},
  {id:'meera',  d:'Head of relationship management. Sees every RM’s post-purchase lines, renewals and service tickets; closes escalations, takes a line over, sets the RM clocks.'}
 ];
 /* [stated 23 Sep] a call that has been placed must be dispositioned — its modal has no way out */
@@ -17,10 +16,10 @@ function navFor(u){
     ? [['rmhome','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]]
     : [['home','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
   if(u.role==='mgr') return [['team','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
-  if(u.role==='rm') return [['rmhome','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tickets','Tickets',ic('ticket','ic22')],['tasks','Tasks',ic('checks','ic22')]];
+  if(u.role==='rm') return [['rmhome','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
   /* [stated 24 Sep · TBD-54] the head of RM gets Pipeline in Team view too — her team's
      post-purchase lines were otherwise reachable only through home cards and Tickets */
-  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tickets','Tickets',ic('ticket','ic22')],['tasks','My tasks',ic('checks','ic22')],['rules','Task rules',ic('settings','ic22')]];
+  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
   return [['home','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
 }
 function navBadge(v,u){
@@ -34,10 +33,16 @@ function navBadge(v,u){
 }
 function activeNav(){ var v=S.route.v, u=me(); if(v==='opp'||v==='opps') return 'opps'; if(v==='home'||v==='rmhome'||v==='team'||v==='rmteam') return homeRoute(u); if(v==='line'||v==='pipeline'){ if(hasViews(u)&&teamView(u)) return homeRoute(u); return 'pipeline'; } if(v==='acct'||v==='accounts'||v==='policy') return 'accounts'; if(v==='ticket'||v==='tickets'||v==='svctix'||v==='svcnew'||v==='svc') return 'tickets'; if(v==='rule'||v==='rules'||v==='rulesim'||v==='rulecfg') return 'rules'; return v; }
 
+
+/* [stated 27 Sep] sub-lines are one line; the full text is on hover when it is cut */
+var CLAMP_SEL='.hdrow .sub,table.t td .sub,.rowlist .bd .m,.rowlist .bd .m2,.hrow .mt,.na .w,.zsib .meta,.zkv .meta,.qc-m,.tk-kvs .meta,.arm,.crow2 .m2,.metaline.one';
+document.addEventListener('mouseover',function(ev){ var t=ev.target; if(!(t instanceof Element)) return; var el=t.closest(CLAMP_SEL); if(!el||el.title) return; if(el.scrollWidth>el.clientWidth+1) el.title=el.textContent.replace(/\s+/g,' ').trim(); });
 function paint(){
   var root=document.getElementById('app');
   if(!S.user){ root.innerHTML=renderSignin(); paintModal(); return; }
   var u=me(), scr=SCREENS[S.route.v] ? SCREENS[S.route.v]() : SCREENS.notfound();
+  /* [stated 26 Sep · 19.3] prototype control: a slow network shows the skeleton first */
+  var rk=JSON.stringify(S.route); if(S.ui.slow&&S._skel!==rk){ S._skel=rk; scr={sc:scr.sc,ctx:scr.ctx,html:skeleton(),cta:''}; setTimeout(function(){ if(S._skel===rk) paint(); },700); }
   var nav=navFor(u), an=activeNav();
   root.innerHTML='<div class="app">'+
     '<aside class="side'+(S.side?' open':'')+'" id="side">'+
@@ -75,6 +80,8 @@ FLOWS.proto={t:'Prototype controls', sub:'Not part of the product. Time passing 
   body:function(){ return timeblock('The clock is fixed at '+fmt(S.now)+' ('+fmtD(S.now)+'). Advance it to see tasks cross into Overdue and Escalated, and lines cross the 30-day quiet line. It never runs on its own.',
       '<button class="timebtn" data-time="60">+1 working hour</button><button class="timebtn" data-time="540">+1 working day</button><button class="timebtn" data-time="2700">+1 working week</button><button class="timebtn" data-time="0">Back to the seed clock</button>')+
     '<div class="mt12">'+note('neutral','Connectivity','The app is '+(S.offline?'<b>offline</b>':'<b>online</b>')+'. Offline, every save fails with a retry, so you can see how a rep is told and what happens when the network returns.<div class="mt8"><button class="btn sm" data-offline="'+(S.offline?'0':'1')+'">'+ic(S.offline?'wifi':'wifioff')+(S.offline?'Reconnect':'Go offline')+'</button></div>','info')+'</div>'+
+    '<div class="mt12">'+note('neutral','Loading and errors','See the states a slow or failing network produces: skeletons while a screen loads, and a single panel that could not load while the rest still works.<div class="mt8 flex wrap" style="gap:8px"><button class="btn sm" data-protoui="slow">'+(S.ui.slow?'✓ Slow loading on':'Slow loading')+'</button><button class="btn sm" data-protoui="failPanels">'+(S.ui.failPanels?'✓ Failing panels on':'Make panels fail')+'</button></div>','info')+'</div>'+
+    '<div class="mt12">'+note('neutral','Cholamandalam KYC — account type','The Chola KYC step adapts to the account: a verified account reuses the PAN and GST on file; a provisional account is asked to upload them and the numbers are read by OCR. Toggle the Workmen’s Compensation account to see both.<div class="mt8"><button class="btn sm" data-protoprov="1">'+(cholaWcAcct()&&cholaWcAcct().prov?'✓ WC account is provisional':'Make the WC account provisional')+'</button></div>','info')+'</div>'+
     '<div class="mt12">'+note('amber','Reset','Wipes every change you made in this browser and returns to the seed. Cannot be undone.<div class="mt8"><button class="btn danger sm" data-reset="1">Reset to seed</button></div>')+'</div>'; }};
 FLOWS.switchUser={t:'Switch person', sub:'Same data, another chair. Nothing is lost.', nofoot:function(){return true;},
   body:function(){ return PERSONAS.map(function(p){ var u=userById(p.id); return '<button class="opt" data-signin="'+p.id+'"><span class="mk'+(S.user===p.id?' on':'')+'"></span><span class="bd"><b>'+esc(u.n)+'</b><span>'+esc(u.title)+'</span></span></button>'; }).join('')+'<div class="mt8"><button class="btn ghost sm" data-signout="1">'+ic('logout')+'Sign out</button></div>'; }};
@@ -83,9 +90,10 @@ FLOWS.switchUser={t:'Switch person', sub:'Same data, another chair. Nothing is l
 document.addEventListener('click',function(e){
   var t=e.target; if(!(t instanceof Element)) return;
   var x;
+  if(t.closest('[data-taskdue]')||t.closest('select.sel,input.inp')&&t.closest('.row')){ return; }
   if(x=t.closest('[data-signin]')){ S.user=x.dataset.signin; S.flow=null; S.sel={}; S.hist=[]; delete S.ui.vw; /* [stated 23 Sep] each person starts in their own default view */ var u=me(); S.route={v:homeRoute(u)}; save(); paint(); return; }
   if(t.closest('[data-signout]')){ S.user=null; S.flow=null; S.route={v:'signin'}; save(); paint(); return; }
-  if(t.closest('[data-switch]')){ openFlow('switchUser'); return; }
+  if(t.closest('[data-switch]')){ S.user=null; S.flow=null; S.route={v:'signin'}; save(); paint(); return; }
   if(t.closest('[data-proto]')){ openFlow('proto'); return; }
   if(t.closest('[data-reset]')){ reset(); return; }
   if(x=t.closest('[data-offline]')){ S.offline=x.dataset.offline==='1'; if(!S.offline && S.pending){ retry(); } paint(); if(S.flow==='proto') paintModal(); toast(S.offline?'Offline':'Back online',S.offline?'Saves will fail until you reconnect.':'Saving works again.'); return; }
@@ -111,7 +119,7 @@ document.addEventListener('click',function(e){
   if(t.closest('[data-commit]')){ commit(); return; }
   if(t.closest('[data-alt]')){ var f=FLOWS[S.flow]; if(f&&f.alt){ if(typeof f.alt.run==='function'){ f.alt.run(); } else openFlow(f.alt.flow,{line:S.sel.line}); } return; }
   if(t.classList.contains('ovl')){ if(flowLocked()) return; closeFlow(); return; }
-  if(x=t.closest('[data-flow]')){ if(x.disabled) return; openFlow(x.dataset.flow,{line:x.dataset.line||(S.route.id||''),acct:x.dataset.acct||''}); return; }
+  if(x=t.closest('[data-flow]')){ if(x.disabled) return; var fi={line:x.dataset.line||(S.route.id||''),acct:x.dataset.acct||''}; ['pre','from','opp','comb'].forEach(function(k){ if(x.dataset[k]) fi[k]=x.dataset[k]; }); if(fi.pre) fi.d=fi.pre; openFlow(x.dataset.flow,fi); return; }
 });
 document.addEventListener('input',function(e){
   var t=e.target; if(!(t instanceof Element)) return;

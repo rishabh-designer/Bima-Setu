@@ -186,7 +186,7 @@ function docInvoice(c){
 }
 function docQuote(c){
   var l=c.line; if(!l) return docGeneric(c);
-  var qs=(l.rate===1?QUOTES.dau:QUOTES.plc).filter(function(q){return q.st==='quoted';}), r=l.req||{};
+  var qs=(l.rate===1?dauQuotes(l):QUOTES.plc).filter(function(q){return q.st==='quoted';}), r=l.req||{};
   return '<article class="qsheet dsheet">'+
     dHead(BK_BRAND,'Quotes as received',esc(l.product))+
     '<div class="dgrid">'+dRow('Insured',esc(acctName(l)))+dRow('Sum insured',esc(r.si||'—'))+dRow('Period',esc(r.ten||'1 year'))+dRow('Source',esc(l.rate===1?'Priced by the rater':'From BimaPlacement · PLC-'+l.id.slice(3)))+'</div>'+
@@ -354,5 +354,5 @@ function docView1(name,c,label){ return '<button class="btn sm ghost" '+docAttr(
 function docRow(name,held,who,c,extra){
   return '<div><div class="bd"><b>'+esc(name)+'</b>'+(held?'':' '+chip('Not on file','amber',true,true))+
     (extra?'<div class="m">'+extra+'</div>':'')+(!held&&who?'<div class="m">'+esc(who)+'</div>':'')+'</div>'+
-    '<div class="rt">'+(held?docBtns(name,c):'<span class="meta">'+esc(who||'not on file yet')+'</span>')+'</div></div>';
+    '<div class="rt">'+(held?docBtns(name,c):'')+'</div></div>';
 }

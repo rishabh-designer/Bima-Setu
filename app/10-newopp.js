@@ -5,79 +5,100 @@
  * ==================================================================== */
 var PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/, GST_RE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 function noVal(k){ return (S.sel[k]||'').trim(); }
+/* [stated 26 Sep · 1.4] the GSTIN is the only match key. The PAN is characters 3–12 of it — derived, never typed,
+   and a GSTIN belongs to exactly one account, so a match is never ambiguous. There is no name matching at all. */
+function panOfGst(g){ g=String(g||'').toUpperCase(); return g.length===15?g.slice(2,12):''; }
+function gstErr(g){ g=String(g||'').trim().toUpperCase(); if(!g) return ''; if(g.length!==15) return 'A GSTIN is fifteen characters.'; if(!PAN_RE.test(g.slice(2,12))||!GST_RE.test(g)) return 'This GSTIN is not valid.'; return ''; }
 function matchAcct(pan,gst){
-  pan=(pan||'').toUpperCase(); gst=(gst||'').toUpperCase();
-  if(gst.length===15){ var g=S.data.accounts.filter(function(a){return a.gst&&a.gst.toUpperCase()===gst;})[0]; if(g) return {a:g,how:'GSTIN'}; }
-  if(PAN_RE.test(pan)){ var ps=S.data.accounts.filter(function(a){return a.pan&&a.pan.toUpperCase()===pan;}); if(ps.length===1) return {a:ps[0],how:'PAN'}; if(ps.length>1) return gst.length===15?null:{a:null,many:ps}; }
-  return null;
+  gst=(gst||'').toUpperCase(); if(gst.length!==15||gstErr(gst)) return null;
+  var g=S.data.accounts.filter(function(a){return !a.merged&&a.gst&&a.gst.toUpperCase()===gst;})[0];
+  return g?{a:g,how:'GSTIN'}:null;
 }
+function digits(v){ return String(v||'').replace(/\D/g,''); }
+function mobileErr(v){ return v&&digits(v).length<10?'A contact number needs at least ten digits':''; }
+function emailErr(v){ v=String(v||'').trim(); return v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)?'That is not an email address':''; }
+/* the same person on the same account: same name, and the same mobile or the same email */
+function conMatch(a,c){ return (a.con||[]).filter(function(x){ return String(x.n||'').trim().toLowerCase()===String(c.n||'').trim().toLowerCase() &&
+  ((c.m&&digits(x.m)&&digits(x.m).slice(-10)===digits(c.m).slice(-10))||(c.e&&x.e&&x.e.toLowerCase()===String(c.e).toLowerCase())); })[0]||null; }
+/* [stated 26 Sep · 3.1 §6] the product is already open on this account: warn, never block */
+function openProductOn(a,product,skipOpp){ if(!a||!product) return null;
+  var ls=S.data.lines.filter(function(l){ return l.acct===a.id&&l.product===product&&!isRen(l)&&l.opp&&l.opp!==skipOpp&&(openLine(l)||l.status==='park'); });
+  return ls.length?oppOf(ls[0]):null; }
+function openProductWarn(a,product,skipOpp){ var o=openProductOn(a,product,skipOpp); return o?'Product line for '+product+' already open in opportunity '+o.id+'.':''; }
 function newOppErr(){
-  var e={}, pan=noVal('pan').toUpperCase(), gst=noVal('gst').toUpperCase(), m=noVal('m').replace(/[\s\-]/g,''), em=noVal('e');
-  if(pan&&!PAN_RE.test(pan)) e.pan='Five letters, four digits, one letter — e.g. AABCS1234F.';
-  if(gst&&!GST_RE.test(gst)) e.gst='15 characters: 2-digit state code, the PAN, then 3 more.';
-  if(!e.gst&&gst&&pan&&gst.slice(2,12)!==pan) e.gst='The PAN inside this GSTIN is '+gst.slice(2,12)+' — it does not match the PAN above.';
-  if(m&&!/^(\+91)?[6-9]\d{9}$/.test(m)) e.m='An Indian mobile: 10 digits, optionally +91.';
-  if(em&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) e.e='Not an email address.';
+  var e={}, was=function(k){ return S.sel[k]!==undefined; };
+  var ge=gstErr(noVal('gst')); if(ge) e.gst=ge;
+  if(was('m')) { var me_=mobileErr(noVal('m')); if(me_) e.m=me_; }
+  if(was('e')) { var ee=emailErr(noVal('e')); if(ee) e.e=ee; }
   return e;
 }
-function newOppState(){ var e=newOppErr(), pan=noVal('pan').toUpperCase(), gst=noVal('gst').toUpperCase(), m=(e.pan||e.gst)?null:matchAcct(pan,gst), locked=!!(m&&m.a);
-  return {e:e, m:m, locked:locked, name:locked?m.a.n:'', gstHint:(m&&m.many)?'Two registrations share this PAN — the GSTIN picks one.':'', nameHint:locked?'Matched on '+m.how+' · '+m.a.id+(m.a.prov?' · provisional':''):((pan||gst)&&!e.pan&&!e.gst&&!(m&&m.many)?'No account carries this yet — one will be created.':'')}; }
-FLOWS.newOpp={t:'New opportunity', sub:'PAN or GSTIN first. If the company is already here, its name fills itself; if not, a provisional account is created with the opportunity.', wide:true,
+function newOppState(){ var e=newOppErr(), gst=noVal('gst').toUpperCase(), m=e.gst?null:matchAcct('',gst), locked=!!(m&&m.a);
+  var hint;
+  if(!gst) hint='<span class="meta">A provisional account will be created. It becomes verified when the GST certificate (or Aadhaar for a proprietor) arrives at KYC.</span>';
+  else if(e.gst) hint='';
+  else if(locked) hint='<span class="nomatch on">'+ic('circlecheck','ic14')+'<b>'+esc(m.a.n)+'</b> · '+esc(m.a.id)+' · '+esc(m.a.city||'—')+' · owner '+esc(uname(m.a.own))+' · '+(m.a.prov?'Provisional':'Verified')+'</span>';
+  else hint='<span class="meta">No account carries this GSTIN. A new account will be created.</span>';
+  return {e:e, m:m, locked:locked, name:locked?m.a.n:'', hint:hint, warn:locked?openProductWarn(m.a,S.sel.product):''}; }
+FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportunity'; }, sub:function(){ return S.sel.done?'':'GSTIN first — it finds the company if it is already here. With no GSTIN, a provisional account is created with the opportunity.'; }, wide:true,
   repaintOn:['product','src'],
   nofoot:function(){ return !!S.sel.done; },
   body:function(){
-    if(S.sel.done){ var d=S.sel.done, a=by(S.data.accounts,d.acct), l=lineById(d.line);
-      return note('green','Created','<b>'+esc(a.n)+'</b> · '+esc(l.product)+' · '+esc(l.id)+' at New Lead, yours.'+(d.newAcct?' A '+(a.prov?'provisional':'new')+' account was created with it.':' Matched the existing account by '+esc(d.how)+'.')+(d.made?' The new-lead rule set a task due '+esc(fmt(d.made))+'.':''),'circlecheck')+
-        '<div class="flex wrap mt12"><button class="btn primary" data-go="line" data-id="'+l.id+'">Open the product line</button><button class="btn" data-go="acct" data-id="'+a.id+'">Open the account</button><button class="btn ghost" data-close="1">Close</button></div>';
+    if(S.sel.done){ var d=S.sel.done, a=by(S.data.accounts,d.acct), l=lineById(d.line), o=by(S.data.opps,d.opp);
+      /* [stated 26 Sep · 3.1 §7] four lines, Open the account, and a single Done */
+      return '<dl class="kvlist" style="grid-template-columns:140px 1fr;row-gap:12px">'+
+        '<dt>Account</dt><dd>'+esc(a.n)+' <span class="meta">· '+esc(a.id)+' · '+(d.newAcct?'new, ':'matched on GSTIN, ')+(a.prov?'provisional':'verified')+'</span></dd>'+
+        '<dt>Opportunity</dt><dd>'+esc(oName(o))+'</dd>'+
+        '<dt>Product line</dt><dd>'+esc(l.product)+' <span class="meta">· '+esc(l.id)+' · New Lead</span></dd>'+
+        '<dt>Owner</dt><dd>'+esc(uname(l.owner))+(l.owner===S.user?' <span class="meta">· you</span>':'')+'</dd></dl>'+
+        '<div class="flex wrap mt16"><span class="sp"></span><button class="btn" data-go="acct" data-id="'+a.id+'">Open the account</button><button class="btn primary" data-go="line" data-id="'+l.id+'">Done</button></div>';
     }
     var st=newOppState();
-    return '<div class="fgrid"><label class="field"><div class="lbl">PAN</div>'+input('pan',S.sel.pan,'AABCS1234F','style="text-transform:uppercase"')+'<div class="err" id="e_pan">'+esc(st.e.pan||'')+'</div></label>'+
-      '<label class="field"><div class="lbl">GSTIN</div>'+input('gst',S.sel.gst,'27AABCS1234F1Z5','style="text-transform:uppercase"')+'<div class="err" id="e_gst">'+esc(st.e.gst||'')+'</div><div class="hint" id="h_gst">'+esc(st.gstHint)+'</div></label></div>'+
-      '<label class="field"><div class="lbl">Company name</div>'+input('name',st.locked?st.name:(S.sel.name||''),'Legal name as on the PAN card',st.locked?'disabled':'')+'<div class="hint" id="h_name">'+esc(st.nameHint)+'</div></label>'+
-      '<div class="fgrid">'+field('Contact name',input('cn',S.sel.cn,'Who you are speaking to'))+field('Designation',input('cd',S.sel.cd,'CFO'))+'</div>'+
-      '<div class="fgrid">'+field('Mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+field('Email',input('e',S.sel.e,'name@company.in'),'',st.e.e)+'</div>'+
-      '<div class="fgrid">'+field('Product',select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS)))+field('Source',select('src',S.sel.src||'',[['','Choose a source']].concat(SRCS)))+'</div>'+
-      '<div class="fgrid"><div class="field"><div class="lbl">Business type</div>'+seg('bt',[['fresh','Fresh'],['roll','Market rollover']],'')+'</div>'+field('Type','<input class="inp" value="New Business" disabled>')+'</div>';
+    var bt=S.sel.bt;
+    return field('GSTIN',input('gst',S.sel.gst,'29AAACS1234F1Z5','style="text-transform:uppercase"'),'','')+
+      '<div class="err" id="e_gst" style="margin-top:-10px">'+esc(st.e.gst||'')+'</div><div class="hint" id="h_gst" style="margin-top:-8px">'+st.hint+'</div>'+
+      '<label class="field"><div class="lbl">Company name (as per PAN)</div>'+input('name',st.locked?st.name:(S.sel.name||''),'The registered name, not a brand name',st.locked?'disabled':'')+'<div class="hint" id="h_name">'+(st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.')+'</div></label>'+
+      '<div class="fgrid">'+field('POC name',input('cn',S.sel.cn,'Who you are speaking to'))+field('POC mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+'</div>'+
+      '<div class="fgrid">'+field('POC email',input('e',S.sel.e,'name@company.in'),'',st.e.e)+
+        '<label class="field"><div class="lbl">Product</div>'+select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS))+'<div class="hint amber" id="h_prod">'+esc(st.warn)+'</div></label></div>'+
+      '<div class="field"><div class="lbl">Business type</div><div class="fgrid">'+
+        opt('data-mset="bt" data-mval="fresh"',bt==='fresh','Fresh','Buying this cover for the first time')+
+        opt('data-mset="bt" data-mval="roll"',bt==='roll','Market rollover','Moving an existing policy from another broker or insurer')+'</div></div>'+
+      field('Source',select('src',S.sel.src||'',[['','Choose a source']].concat(SRCS)));
   },
   live:function(){ var st=newOppState(), g=function(id){return document.getElementById(id);}, n=g('f_name');
-    if(n){ n.disabled=st.locked; if(st.locked) n.value=st.name; else if(S.sel.wasLocked) n.value=S.sel.name||''; S.sel.wasLocked=st.locked; }
-    if(g('e_pan')) g('e_pan').textContent=st.e.pan||''; if(g('e_gst')) g('e_gst').textContent=st.e.gst||''; if(g('h_gst')) g('h_gst').textContent=st.gstHint; if(g('h_name')) g('h_name').textContent=st.nameHint;
-    var fm=g('f_m'), fe=g('f_e'); [[fm,st.e.m],[fe,st.e.e]].forEach(function(x){ if(!x[0]) return; var lab=x[0].closest('.field'); if(!lab) return; var er=lab.querySelector('.err'); if(x[1]){ if(!er){ er=document.createElement('div'); er.className='err'; lab.appendChild(er); } er.textContent=x[1]; } else if(er) er.remove(); }); },
-  can:function(){ if(S.sel.done) return false; var e=newOppErr(); if(Object.keys(e).length) return false; var pan=noVal('pan').toUpperCase(), gst=noVal('gst').toUpperCase(), m=matchAcct(pan,gst);
-    if(m&&m.many) return false; var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&!!noVal('cn')&&(!!noVal('m')||!!noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
-  ok:'Create opportunity',
-  run:function(){ var pan=noVal('pan').toUpperCase(), gst=noVal('gst').toUpperCase(), m=matchAcct(pan,gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
+    if(n){ n.disabled=st.locked; if(st.locked) n.value=st.name; else if(S.sel.wasLocked){ n.value=''; S.sel.name=''; } S.sel.wasLocked=st.locked; }
+    if(g('e_gst')) g('e_gst').textContent=st.e.gst||''; if(g('h_gst')) g('h_gst').innerHTML=st.hint;
+    if(g('h_name')) g('h_name').textContent=st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.';
+    if(g('h_prod')) g('h_prod').textContent=st.warn;
+    [['f_m',st.e.m],['f_e',st.e.e]].forEach(function(x){ var el=g(x[0]); if(!el) return; var lab=el.closest('.field'); if(!lab) return; var er=lab.querySelector('.err'); if(x[1]){ if(!er){ er=document.createElement('div'); er.className='err'; lab.appendChild(er); } er.textContent=x[1]; } else if(er) er.remove(); }); },
+  can:function(){ if(S.sel.done) return false; var gst=noVal('gst').toUpperCase(); if(gstErr(gst)) return false; var m=matchAcct('',gst);
+    var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&!!noVal('cn')&&digits(noVal('m')).length>=10&&!!noVal('e')&&!emailErr(noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
+  ok:function(){ var m=matchAcct('',noVal('gst')); return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
+  run:function(){ var gst=noVal('gst').toUpperCase(), m=matchAcct('',gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
     var ok=write(function(){
-      if(!a){ a={id:'A-'+(S.data.seq.acct++),n:noVal('name'),pan:pan,gst:gst,city:'',st:gst?({'27':'Maharashtra','24':'Gujarat','29':'Karnataka','33':'Tamil Nadu','32':'Kerala','03':'Punjab','07':'Delhi','36':'Telangana'}[gst.slice(0,2)]||''):'',ind:'',emp:'',to:'',grp:'—',own:S.user,prov:(pan&&gst)?0:1,con:[],pols:[],recs:[],prof:null,fin:null,sis:[],createdAt:S.now}; S.data.accounts.push(a); }
-      var c=a.con.filter(function(x){return x.n.toLowerCase()===noVal('cn').toLowerCase();})[0];
-      if(!c){ c={n:noVal('cn'),d:noVal('cd'),m:noVal('m'),e:noVal('e'),dm:a.con.length?0:1}; a.con.push(c); }
-      var o={id:'O-'+(S.data.seq.opp++),acct:a.id,name:shortName(a.n)+' — New Business — '+MONN[NOW().getMonth()]+' '+NOW().getFullYear(),type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user}; S.data.opps.push(o);
-      var l={id:'OP-'+(S.data.seq.line++),opp:o.id,acct:a.id,product:S.sel.product,owner:S.user,stage:1,status:'open',reason:'',revisit:0,att:0,rate:null,rfq:{st:'none',src:'',at:0},req:null,round:1,qAns:0,obj:'',qsel:[],picked:'',prem:0,ins:'',pay:'pre',amt:0,payLines:[],enteredAt:S.now,createdAt:S.now,assignedAt:S.now,src:S.sel.src,contact:{n:c.n,e:c.e||'',m:c.m||''},log:[{at:S.now,t:'Product line created',m:uname(S.user)+' · New opportunity',sys:0,kind:'sys'}]};
-      S.data.lines.push(l); var made=fireRules(l,'stage',1);
+      if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); }
+      var c=conMatch(a,{n:noVal('cn'),m:noVal('m'),e:noVal('e')});
+      if(!c){ c={n:noVal('cn'),d:'',m:noVal('m'),e:noVal('e')}; a.con.push(c); }
+      var o={id:newOppId(),acct:a.id,type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user,log:[]}; S.data.opps.push(o);
+      oppLog(o,'Opportunity created',uname(S.user)+' · '+S.sel.src+' · '+BTYPE[S.sel.bt]);
+      var l=newLine({opp:o.id,acct:a.id,product:S.sel.product,owner:S.user,src:S.sel.src,contact:c,how:uname(S.user)+' · New opportunity'});
+      oppLog(o,'Product line added: '+l.product,'by '+uname(S.user));
+      var made=fireRules(l,'stage',1);
       res={acct:a.id,opp:o.id,line:l.id,newAcct:newAcct,how:m?m.how:'',made:made[0]?made[0].dueAt:0};
     },'the opportunity');
     if(!ok) return 'fail'; S.sel={done:res}; paint(); toast('Opportunity created',res.newAcct?'Account, opportunity and first product line — all yours.':'On the existing account. The line is yours.'); return 'stay'; }};
+HANDLERS.push(function(t){ var x=t.closest('#ovl [data-go]'); if(x&&S.flow==='newOpp'&&S.sel.done){ closeFlow(); } return false; });
 
-/* ---------- simulated inbound enquiries (amber dashed, home) ---------- */
-var INBOUND={
- fire:  {n:'Lakshmi Polymers Pvt Ltd', pan:'AAECL8812K', gst:'27AAECL8812K1Z2', city:'Aurangabad', st:'Maharashtra', ind:'Plastics', product:'Fire & Special Perils', con:{n:'Girish Lakshmi',d:'Director',m:'+91 98600 41122',e:'girish@lakshmipoly.in'}, src:'Inbound — website'},
- marine:{n:'Coastal Exports LLP', pan:'', gst:'', city:'Mangaluru', st:'Karnataka', ind:'Seafood exports', product:'Marine Cargo', con:{n:'Fathima Sheikh',d:'Partner',m:'+91 98440 20311',e:'fathima@coastalexports.in'}, src:'Inbound — website'},
- gh:    {n:'Zenith Software Labs Pvt Ltd', pan:'AAACZ3301P', gst:'29AAACZ3301P1ZK', city:'Bengaluru', st:'Karnataka', ind:'Software', product:'Group Health', con:{n:'Neha Reddy',d:'HR Head',m:'+91 98860 77015',e:'neha@zenithlabs.in'}, src:'Inbound — partner'}
-};
-HANDLERS.push(function(t){
-  var x=t.closest('[data-inbound]'); if(!x) return false;
-  var k=INBOUND[x.dataset.inbound]; if(!k) return true;
-  var owner=assignFor(k.product), res={};
-  var ok=write(function(){
-    var m=matchAcct(k.pan,k.gst), a=m&&m.a?m.a:null, newAcct=!a;
-    if(!a){ a={id:'A-'+(S.data.seq.acct++),n:k.n,pan:k.pan,gst:k.gst,city:k.city,st:k.st,ind:k.ind,emp:'',to:'',grp:'—',own:owner,prov:(k.pan&&k.gst)?0:1,con:[Object.assign({dm:1},k.con)],pols:[],recs:[],prof:null,fin:null,sis:[],createdAt:S.now}; S.data.accounts.push(a); }
-    var o={id:'O-'+(S.data.seq.opp++),acct:a.id,name:shortName(a.n)+' — New Business — '+MONN[NOW().getMonth()]+' '+NOW().getFullYear(),type:'New Business',bt:'Fresh',src:k.src,created:S.now,by:'system'}; S.data.opps.push(o);
-    var l={id:'OP-'+(S.data.seq.line++),opp:o.id,acct:a.id,product:k.product,owner:owner,stage:1,status:'open',reason:'',revisit:0,att:0,rate:null,rfq:{st:'none',src:'',at:0},req:null,round:1,qAns:0,obj:'',qsel:[],picked:'',prem:0,ins:'',pay:'pre',amt:0,payLines:[],enteredAt:S.now,createdAt:S.now,assignedAt:S.now,src:k.src,contact:{n:k.con.n,e:k.con.e,m:k.con.m},log:[{at:S.now,t:'Product line created',m:'System · '+k.src+' · assigned to '+uname(owner)+' by the '+(CATOF[k.product])+' rule',sys:1,kind:'sys'}]};
-    S.data.lines.push(l); fireRules(l,'stage',1); res={line:l.id,acct:a.id,newAcct:newAcct};
-  },'the inbound enquiry');
-  if(!ok) return true;
-  paint();
-  var mine=owner===S.user;
-  toast('Inbound enquiry — '+k.product+(res.newAcct?'':' · existing account matched by PAN'), mine?'Assigned to you: least loaded in '+CATOF[k.product]+'. It is in Newly assigned.':'Assigned to '+uname(owner)+' — least loaded in '+CATOF[k.product]+'. It is not yours, so it is not on your home.');
-  return true;
-});
+/* ---------- one account, one line: the shapes every creation path writes ---------- */
+var GST_STATE={'27':'Maharashtra','24':'Gujarat','29':'Karnataka','33':'Tamil Nadu','32':'Kerala','03':'Punjab','07':'Delhi','36':'Telangana'};
+function newAccount(o){ var gst=(o.gst||'').toUpperCase();
+  var a={id:'A-'+(S.data.seq.acct++),n:o.n,trade:o.trade||'',pan:panOfGst(gst),gst:gst,city:o.city||'',st:o.st||(gst?(GST_STATE[gst.slice(0,2)]||''):''),ind:o.ind||'',emp:'',to:'',grp:'—',own:o.own,prov:o.prov?1:0,
+    con:[],pols:[],recs:[],prof:null,fin:null,sis:[],createdAt:S.now,createdBy:o.createdBy||'system',log:[]};
+  if(!a.prov){ a.kycBy=o.createdBy||'system'; a.kycAt=S.now; a.kycHow=o.kycHow||'GSTIN entered at creation · PAN derived from it'; }
+  S.data.accounts.push(a); return a; }
+function newLine(o){
+  var l={id:'OP-'+(S.data.seq.line++),opp:o.opp,acct:o.acct,product:o.product,owner:o.owner,stage:o.stage||1,status:'open',reason:'',revisit:0,att:0,rate:o.rate===undefined?null:o.rate,rfq:{st:'none',f:{}},req:o.req||null,round:1,qAns:0,obj:'',qsel:[],picked:o.picked||'',prem:o.prem||0,ins:o.picked||'',pay:'pre',payMode:'',amt:0,payLines:[],
+    enteredAt:S.now,createdAt:S.now,assignedAt:S.now,src:o.src||'',contact:{n:o.contact.n||'',e:o.contact.e||'',m:o.contact.m||''},log:[{at:S.now,t:'Product line created',m:o.how||uname(S.user),sys:o.sys?1:0,kind:'sys'}]};
+  S.data.lines.push(l); return l; }
+function acctLog(a,t,m,kind){ if(!a.log) a.log=[]; a.log.unshift({at:S.now,t:t,m:m||uname(S.user),kind:kind||'sys'}); }
+function oppLog(o,t,m){ if(!o.log) o.log=[]; o.log.unshift({at:S.now,t:t,m:m||uname(S.user)}); }

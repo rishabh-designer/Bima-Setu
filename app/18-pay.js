@@ -22,7 +22,8 @@ function payModeBlock(l){
 FLOWS.share={t:'Share payment details with the client', sub:'Check the payment mode and the details Ops returned, then send them.',
   body:function(){ var l=FL();
     return payModeBlock(l)+
-      '<div class="fgrid">'+field('Send by',select('ch',S.sel.ch||'Email',['Email','WhatsApp']))+field('To','<input class="inp" value="'+esc(l.contact.n+' · '+(S.sel.ch==='WhatsApp'?(l.contact.m||''):(l.contact.e||'')))+'" disabled>')+'</div>'; },
+      '<div class="fgrid">'+field('Send by',select('ch',S.sel.ch||'Email',['Email','WhatsApp']))+field('To','<input class="inp" value="'+esc(l.contact.n+' · '+(S.sel.ch==='WhatsApp'?(l.contact.m||''):(l.contact.e||'')))+'" disabled>')+'</div>'+
+      (payModeOf(l)==='Payment link'?'<button type="button" class="btn sm" data-copy="1">Copy the payment link</button>':''); },
   repaintOn:['ch'],
   can:function(){return true;}, ok:function(){ return 'Send to '+FL().contact.n; },
   run:function(){ var l=FL(), made=[]; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='shared'; logAdd(x,'Payment details shared with client',uname(S.user)+' · '+payModeOf(l)+' · '+(S.sel.ch||'Email')+' to '+(S.sel.ch==='WhatsApp'?x.contact.m:x.contact.e),'pay'); if(x.stage<10) made=made.concat(moveStage(x,10,'Payment details sent')); }); },'sharing'); if(!ok) return 'fail'; toast('Payment details sent to '+l.contact.n,payModeOf(l)+' · '+stageToast(l,made)); }};
@@ -48,7 +49,7 @@ function proofReadNow(){
 function proofTake(name,url){ S.sel.img=url; S.sel.fname=name; S.sel.ferr=''; S.sel.read='reading'; S.sel.amt=''; S.sel.utr=''; paintModal(); setTimeout(proofReadNow,900); }
 function proofMatch(){ var l=FL(), s=S.sel, due=l.amt||premOf(l), amtOk=String(s.amt||'').replace(/\D/g,'')===String(due);
   if(!s.img||s.read==='reading'||!s.amt) return '';
-  return amtOk?note('green','','<b>Matches the '+INR(due)+' requested.</b>'):note('red','Amount does not match','The request was for '+INR(due)+'. Part payments are not supported — raise a fresh request for the amount actually paid.','alert'); }
+  return amtOk?note('green','','<b>Matches the '+INR(due)+' requested.</b>'):note('amber','Amount does not match','The request was for '+INR(due)+'; the screenshot reads '+INR(+String(s.amt).replace(/\D/g,''))+'. You can still confirm — both figures are recorded and the difference is flagged.','alert'); }
 FLOWS.proof={t:'Confirm payment', sub:'Upload the payment screenshot the client sent. The amount and UTR are read from it.',
   onInput:function(k){ if(k!=='amt') return; var el=document.getElementById('proofmatch'); if(el) el.innerHTML=proofMatch(); },
   body:function(){ var l=FL(), s=S.sel, due=l.amt||premOf(l), amtOk=String(s.amt||'').replace(/\D/g,'')===String(due), h='';
@@ -61,18 +62,23 @@ FLOWS.proof={t:'Confirm payment', sub:'Upload the payment screenshot the client 
       h+='<div class="pshot"><img src="'+s.img+'" alt="Payment screenshot"><div class="pshot-m"><b>'+esc(s.fname)+'</b>'+
         '<span class="'+(s.read==='fail'?'amber':(s.read==='done'?'green':''))+'">'+(s.read==='reading'?'Reading the amount…':(s.read==='done'?'Amount and UTR read from the screenshot':'Couldn’t read the amount — type it from the screenshot'))+'</span>'+
         '<button type="button" class="quiet" data-proofclear="1">Replace screenshot</button></div></div>';
-      if(s.read==='done') h+='<div class="kvgrid two">'+kv('Amount paid','<b style="font-size:var(--fs-xl)">'+INR(+s.amt)+'</b>')+kv('UTR','<span class="mono">'+esc(s.utr||'—')+'</span>')+'</div>';
-      if(s.read==='fail') h+='<div class="fgrid">'+field('Amount paid',input('amt',s.amt,'e.g. '+INR(due).replace('₹','')),'Type it exactly as on the screenshot.')+field('UTR — optional',input('utr',s.utr,'e.g. SBIN226305412'))+'</div>';
+      if(s.read==='done'||s.read==='fail') h+='<div class="fgrid">'+field('Amount paid',input('amt',s.amt,'e.g. '+INR(due).replace('₹','')),s.read==='done'?'Read from the screenshot — correct it if it is wrong.':'Type it exactly as on the screenshot.')+field('UTR — optional',input('utr',s.utr,'e.g. SBIN226305412'))+'</div>';
       h+='<div id="proofmatch" class="proofmatch">'+proofMatch()+'</div>';
     }
-    h+=field('Handover note for the RM \u2014 optional',input('pnote',s.pnote,'Anything promised, any sensitivity, the best way to reach the client'),'[stated 24 Sep \u00b7 TBD-22] not mandatory. Where it is written it goes to '+esc(uname(rmFor(acctOf(l))))+' with the account, the quote, the KYC documents and this screenshot.');
-    h+=note('neutral','','Confirming moves the account and the line to '+esc(uname(rmFor(acctOf(l))))+' and opens the post-purchase ticket. It cannot be undone.');
+    h+=field('Handover note for the RM \u2014 optional',input('pnote',s.pnote,'Anything promised, any sensitivity, the best way to reach the client'),'[stated 24 Sep \u00b7 TBD-22] not mandatory. Where it is written it goes to '+esc(uname(rmFor(acctOf(l),l.product)))+' with the account, the quote, the KYC documents and this screenshot.');
+    h+=field('Confirmed by','<input class="inp" value="'+esc(uname(S.user))+'" disabled>');
+    h+=note('blue','','The insurer collects the money. There is no real-time confirmation — the screenshot is the evidence, and the insurer reconciles it.','info');
+    h+=note('neutral','','Confirming moves the account and the line to '+esc(uname(rmFor(acctOf(l),l.product)))+' and opens the post-purchase ticket. It cannot be undone.');
+    var miss=!s.img?'Upload the screenshot':(s.read==='reading'?'Reading the screenshot…':(!String(s.amt||'').replace(/\D/g,'')?'Enter the amount paid':'')); if(miss) h+='<div class="meta mt8">'+esc(miss)+' to confirm.</div>';
     return h; },
-  can:function(){ var l=FL(), s=S.sel, due=l.amt||premOf(l); return !!s.img && (s.read==='done'||s.read==='fail') && String(s.amt||'').replace(/\D/g,'')===String(due); }, ok:'Confirm payment',
-  run:function(){ var l=FL(), a=acctOf(l), rm=rmFor(a), s=S.sel; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='paid'; x.soldBy=x.owner; x.paidAt=S.now;
+  can:function(){ var s=S.sel; return !!s.img && (s.read==='done'||s.read==='fail') && !!String(s.amt||'').replace(/\D/g,''); }, ok:'Confirm payment',
+  run:function(){ var l=FL(), a=acctOf(l), rm=rmFor(a,l.product), s=S.sel; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='paid'; x.soldBy=x.owner; x.paidAt=S.now;
       x.hand={note:(s.pnote||'').trim(),by:S.user,at:S.now,utr:s.utr||'',proof:'Payment screenshot · '+(s.fname||'screenshot'),read:s.read==='done'?'read from the screenshot':'typed by '+uname(S.user)};
-      logAdd(x,'Payment confirmed',uname(S.user)+' · '+INR(x.amt||premOf(x))+' '+(s.read==='done'?'read from the screenshot':'typed from the screenshot')+(s.utr?' · UTR '+s.utr:''),'pay');
-      logAdd(x,'Ownership transferred to '+uname(rm),'System · account and product line owner both moved · handover packet attached','sys',1);
+      var paidAmt=+String(s.amt).replace(/\D/g,''), due=x.amt||premOf(x); if(paidAmt!==due) x.payDiff={due:due,paid:paidAmt};
+      logAdd(x,'Payment confirmed',uname(S.user)+' · '+INR(paidAmt)+(paidAmt!==due?' paid against '+INR(due)+' requested · flagged':'')+' · '+(s.read==='done'?'read from the screenshot':'typed from the screenshot')+(s.utr?' · UTR '+s.utr:''),'pay');
+      logAdd(x,'Sold by '+uname(x.owner),'System · '+(x.picked||'')+' · '+INR(premOf(x)),'sys',1);
+      x.notSel=quotesFor(x).filter(function(q){return q.st==='quoted'&&q.i!==x.picked;}).map(function(q){return q.i;});
+      logAdd(x,'Owner changed from '+uname(x.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · Sold by '+uname(x.owner)+' · account owner moved too','sys',1);
       x.owner=rm; tasksOfLine(x.id).forEach(function(t){ if(!t.done) t.owner=rm; }); moveStage(x,11,'Payment confirmed'); issCreate(x); });
       if(a) a.own=rm; },'the payment'); if(!ok) return 'fail';
     toast('Paid — handed to '+uname(rm),'Payment Completed. Sold by '+uname(S.user)+'. The post-purchase ticket is open; the RM’s welcome-call clock is running.'); }};

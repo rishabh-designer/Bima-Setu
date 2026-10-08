@@ -11,16 +11,16 @@
    whatever the insurer. Digitised or offline per insurer is still a stand-in [open].
    The liability product list itself is the stand-in — the product groups are still coming. */
 var PF_OFFLINE={'Oriental Insurance':1,'United India':1};   /* [proposed] which insurers have no digital form */
-var ISS_STAGE={new:'New / Unassigned',docs:'Document Collection',pf:'Proposal form Pending',await:'Awaiting Policy copy',closed:'Closed',withdrawn:'Withdrawn'};
+var ISS_STAGE={new:'New / Unassigned',docs:'Document Collection',pf:'Proposal form Pending',await:'Awaiting Policy copy',closed:'Closed'};
 var CS_NAME='Radha Iyer', GENERIC_FROM='service@bimakavach.example';
-/* [stated 24 Sep · TBD-23] three missed follow-ups escalate the chase to the RM's manager */
-var CHASE_ESC=3;
+/* [stated 26 Sep · 10.12] a chase escalates on the clock only — there is no count trigger */
 function rhlMode(l){ if(!isLiability(l.product)) return 'none'; return RHL_SYS[l.picked||l.ins]?'sys':'ins'; }
 function pfMode(l){ if(!isLiability(l.product)) return 'none'; return PF_OFFLINE[l.picked||l.ins]?'off':'dig'; }
 /* [stated 24 Sep · TBD-25/27] one mandate covers the whole account, not an account-and-insurer pair */
 function mandateOnFile(acctId){ return (S.data.mandates||[]).filter(function(m){return m.acct===acctId&&m.status==='active'&&(!m.until||m.until>S.now);})[0]||null; }
 function mdLive(m){ return !!m && m.status==='active' && (!m.until||m.until>S.now); }
-function rmFor(a){ var o=a?userById(a.own):null; if(o&&o.role==='rm') return o.id; var rms=S.data.users.filter(function(u){return u.role==='rm';}); var counts=rms.map(function(u){ return S.data.lines.filter(function(l){return l.owner===u.id&&postLine(l);}).length; }); return rms[counts.indexOf(Math.min.apply(null,counts))].id; }
+/* [stated 26 Sep · 4.4 / 12.1] the account's RM if it has one; otherwise the fallback RM configured for the product */
+function rmFor(a,product){ var o=a?userById(a.own):null; if(o&&(o.role==='rm'||o.role==='rmhead')) return o.id; return FALLBACK_RM[product]||'priya'; }
 function polOfLine(l){ var a=acctOf(l); return a?a.pols.filter(function(p){return p.line===l.id;})[0]:null; }
 function polCode(p){ return 'POL-'+p.split(' ')[0].toUpperCase().replace(/[^A-Z]/g,'').slice(0,3); }
 
@@ -61,7 +61,22 @@ function issRequestPolicy(l){
   logAdd(l,'Policy copy and tax invoice requested from '+(l.picked||l.ins),'System · automatic once every requirement is complete · 3 follow-ups, then 3 escalations','sys',1);
   moveStage(l,13,'Every requirement complete · policy copy requested');
 }
-function issPolicyArrived(l,how){ var r=l.iss.rows; r.pol.copy=1; r.pol.inv=1; r.pol.st='qc'; logAdd(l,'Policy copy and tax invoice received','System · '+(how==='bot'?'extracted from the insurer’s reply by the email bot':'uploaded by Customer Success')+' · in QC before they go to the client','sys',1); }
+function issPolicyArrived(l,how,only){ var r=l.iss.rows, p=polOfLine(l); r.pol.copy=1; r.pol.inv=only?0:1; r.pol.st='qc';
+  /* the desk captures these off the copy; the RM compares them with the confirmed quote */
+  r.pol.cap={pno:p?insPolNo(p):'',period:fmtD(S.now)+' – '+fmtD(S.now+365*86400000-86400000),si:(l.req||{}).si||'—',pr:premOf(l),ins:l.picked||l.ins};
+  logAdd(l,only?'Policy copy received · tax invoice awaited':'Policy copy and tax invoice received','System · '+(how==='bot'?'extracted from the insurer’s reply by the email bot':'uploaded by the desk')+' · waiting for the RM’s check','sys',1); }
+FLOWS.qcApprove={t:'Check the policy copy', sub:'Before it goes to the client. Compare what the desk read off the copy with what the client confirmed.', wide:true,
+  body:function(){ var l=FL(), c=l.iss.rows.pol.cap||{}, inv=l.iss.rows.pol.inv, ok=function(a,b){ return String(a)===String(b)?chip('Matches','green',false,true):chip('Check','amber',false,true); };
+    return '<div class="flex" style="gap:8px">'+docBtns('Policy copy',{line:l.id})+(inv?docBtns('Tax invoice',{line:l.id}):chip('Tax invoice · awaited','amber',false,true))+'</div>'+
+      '<div class="tw mt12"><table class="t"><thead><tr><th></th><th>Confirmed quote</th><th>Read off the copy</th><th></th></tr></thead><tbody>'+
+      '<tr><td>Insurer</td><td>'+esc(l.picked||l.ins)+'</td><td>'+esc(c.ins||'—')+'</td><td>'+ok(l.picked||l.ins,c.ins)+'</td></tr>'+
+      '<tr><td>Premium</td><td>'+INR(premOf(l))+'</td><td>'+INR(c.pr||0)+'</td><td>'+ok(premOf(l),c.pr)+'</td></tr>'+
+      '<tr><td>Sum insured</td><td>'+esc((l.req||{}).si||'—')+'</td><td>'+esc(c.si||'—')+'</td><td>'+ok((l.req||{}).si||'—',c.si)+'</td></tr>'+
+      '<tr><td>Insurer policy number</td><td class="meta">—</td><td class="mono">'+esc(c.pno||'—')+'</td><td></td></tr>'+
+      '<tr><td>Policy period</td><td class="meta">—</td><td>'+esc(c.period||'—')+'</td><td></td></tr></tbody></table></div>'+
+      (inv?note('blue','','Approving sends the policy copy and the tax invoice to '+esc(l.contact.n||'the client')+' on the three rails and issues the line.','info'):note('amber','The tax invoice has not arrived','You can check the copy now; it goes out once the invoice is in.','alert')); },
+  can:function(){ return !!FL().iss.rows.pol.inv; }, ok:'Approve and send',
+  run:function(){ var l=FL(); var ok=write(function(){ logAdd(l,'Policy copy checked and approved',uname(S.user)+' · matches the confirmed quote','post'); issSend(l); },'the approval'); if(!ok) return 'fail'; toast('Issued','Policy copy and tax invoice sent to the client. Your policy explanation call is set.'); }};
 function issSend(l){
   var a=acctOf(l), r=l.iss.rows, p=polOfLine(l), c=l.contact;
   r.pol.st='sent'; r.pol.at=S.now; l.iss.stage='closed';
@@ -72,16 +87,14 @@ function issSend(l){
   logAdd(l,'Policy copy and tax invoice sent to the client','System · QC passed · three rails · insurer policy number read from the copy'+(p?' · '+p.pno+' · BK '+(p.bkno||'—'):''),'post',1);
   moveStage(l,14,'Policy copy sent to the client');
 }
-function issWithdraw(l,why){ var a=acctOf(l), p=polOfLine(l); l.iss.stage='withdrawn'; l.status='withdrawn'; l.reason=why||'Client withdrew'; if(p&&p.issuing&&a) a.pols.splice(a.pols.indexOf(p),1); tasksOfLine(l.id).forEach(function(t){ if(!t.done){ t.done=1; t.doneAt=S.now; t.doneBy='system'; } }); logAdd(l,'Marked Customer Withdrawn','Customer Success · '+CS_NAME+' · '+(why||'')+' · stage frozen at '+stageName(l.stage)+' · no refund path','sys',1); }
-function issCorrection(l){ var r=l.iss.rows; r.pf.st='pending'; r.pf.recv=0; r.pf.fu=0; r.pf.at=S.now; r.pol.st='na'; l.iss.stage=r.rhl.mode==='none'?'pf':'docs'; issMail(l,'client',GENERIC_FROM,l.contact.e||l.contact.n,'Proposal form — a correction is needed','The insurer needs one correction on the proposal form. The link is open again on Bimakendra.'); logAdd(l,'Insurer returned the proposal form for correction','System · the line goes back to Policy Documents Pending — the one backward move after payment','post',1); moveStage(l,12,'Correction requested by the insurer'); }
-
+/* [stated 26 Sep · 10.1] nothing after payment withdraws, and the line never goes back from 13 to 12 */
 /* ---------- derived: who must act, rows text, ticket object ---------- */
 function issWaiting(l){
   if(dead(l)||l.stage===14) return '—';
   if(l.stage===11||!l.iss) return 'Post-purchase';
   var r=l.iss.rows;
   if(l.stage===12){ if(r.pf.mode==='off'&&r.pf.st==='pending'&&r.pf.recv) return 'Us'; if(r.pf.st==='pending'||r.md.st==='pending') return 'Client'; if(r.rhl.st==='pending') return 'Insurer'; return 'Post-purchase'; }
-  if(l.stage===13) return r.pol.st==='qc'?'Post-purchase':'Insurer';
+  if(l.stage===13) return r.pol.st==='qc'?'Us':'Insurer';
   return 'Post-purchase';
 }
 function rowTx(k,r){
@@ -94,14 +107,15 @@ function rowTx(k,r){
 function postRowsTx(l){ if(!l.iss) return ''; var r=l.iss.rows; return ['rhl','pf','md','pol'].map(function(k){return rowTx(k,r[k]);}).filter(Boolean).join(' · ')||ISS_STAGE[l.iss.stage]; }
 function issTicket(l){
   var i=l.iss, w=issWaiting(l), tone=i.stage==='closed'?'green':(i.stage==='withdrawn'?'red':(w==='Us'?'amber':'violet'));
-  return {id:i.id, ty:'Post-purchase', desk:'BimaOps · Customer Success', line:l, st:ISS_STAGE[i.stage], tone:tone, raised:i.createdAt, who:'System',
+  return {id:i.id, ty:'Post-purchase', label:'Issuance', desk:'BimaOps · Customer Success', line:l, st:ISS_STAGE[i.stage], tone:tone, raised:i.createdAt, who:'System',
     pend: w==='Us'?'The client sent the filled proposal form. Upload it to the ticket.':(w==='Client'?'Proposal form or mandate still with the client — the RM chases.':''), act: w==='Us'?'uploadPf':'', actLbl:'Upload proposal form'};
 }
 function openRuleTask(l,rule){ return tasksOfLine(l.id).filter(function(t){return !t.done&&t.rule===rule;})[0]||null; }
 function postNextAction(l){
   var i=l.iss, r=i?i.rows:null, w=issWaiting(l), welcome=openRuleTask(l,'TR-08');
+  if(isChola(l)) return cholaPostNext(l);
   if(l.stage===11) return welcome
-    ? {tone:'amber',lab:'Next action',txt:'Welcome call — introduce yourself before the links land',why:'The proposal form and mandate links go out from a generic BimaKavach address the moment Customer Success assigns '+(i?i.id:'the ticket')+' — often before you have called. The email names you.',acts:[['welcome','Log welcome call']]}
+    ? {tone:'amber',lab:'Next action',txt:'Paid. Handed over from '+uname(l.soldBy||'sales'),why:'The proposal form and mandate links go out from a generic BimaKavach address the moment Customer Success assigns '+(i?i.id:'the ticket')+' — often before you have called. The email names you.',acts:[['welcome','Welcome call']]}
     : {tone:'violet',lab:'Waiting on post-purchase',txt:(i?i.id:'The ticket')+' created · Customer Success has not assigned it yet',why:'Nothing is needed from you until the document tracks start.',acts:[]};
   if(l.stage===12){
     if(w==='Us') return {tone:'amber',lab:'Next action',txt:'The client sent the filled proposal form. Upload it to the ticket',why:'Only you can — the client sends it to you, not to the desk. If it was the last document outstanding the line moves on by itself.',acts:[['uploadPf','Upload proposal form'],['chase2','Log chase']]};
@@ -110,8 +124,8 @@ function postNextAction(l){
     return {tone:'violet',lab:'Waiting on post-purchase',txt:'Documents in · the desk is moving it on',why:'',acts:[]};
   }
   if(l.stage===13) return r.pol.st==='qc'
-    ? {tone:'violet',lab:'With post-purchase',txt:'Policy copy and tax invoice received · in QC',why:'QC belongs to the post-purchase team. When it passes, the documents go to the client on the three rails and you are told at the same moment.',acts:[]}
-    : {tone:'violet',lab:'Waiting on the insurer',txt:'Policy copy requested'+(r.pol.fu||r.pol.esc?' · '+r.pol.fu+' follow-ups, '+r.pol.esc+' escalations':''),why:'Three follow-ups, then three escalations. When all six are exhausted, Ops contacts the insurer outside the ticket. Watch only.',acts:[]};
+    ? {tone:'amber',lab:'Next action',txt:'Policy copy received — check it before it goes to the client',why:r.pol.inv?'Compare it with the confirmed quote, then approve. It goes out on the three rails.':'Tax invoice · awaited. You can check the copy now; it goes out once the invoice is in.',acts:[['qcApprove','Check and approve']]}
+    : {tone:'violet',lab:'Waiting on the insurer',txt:'Copy requested from '+(l.picked||l.ins)+' '+plural(daysBetween(r.pol.at||l.enteredAt,S.now),'day')+' ago'+(r.pol.fu||r.pol.esc?' · '+r.pol.fu+' follow-ups, '+r.pol.esc+' escalations':''),why:'Three follow-ups, then three escalations. When all six are exhausted, Ops contacts the insurer outside the ticket. Watch only.',acts:[['go:ticket:'+i.id,'Open ticket']]};
   if(l.stage===14){ var ex=openRuleTask(l,'TR-10'); return ex
     ? {tone:'green',lab:'Issued — one call left',txt:'Policy copy and tax invoice sent to the client. Walk them through the cover',why:'The client already has the documents on the three rails. The policy explanation call is yours.',acts:[['explain','Log policy explanation call']]}
     : {tone:'green',lab:'Issued',txt:'Steady state',why:'Endorsements and claims from the account’s Policies tab; renewal as a new opportunity linked to this policy.',acts:[]}; }
@@ -123,8 +137,8 @@ function postSims(l){
   var b=[], i=l.iss; if(!i) return b; var r=i.rows, at=function(lab,k){ b.push(simbtn(lab,'data-psim="'+k+'" data-line="'+l.id+'"')); };
   if(l.stage===11&&i.stage==='new') at('Customer Success assigns the ticket — tracks start','assign');
   if(l.stage===12){ if(r.rhl.st==='pending'){ at('Insurer sends the RHL (email bot)','rhl'); at('Desk follow-up to the insurer','csfu'); } if(r.pf.st==='pending'&&r.pf.mode==='dig') at('Client fills the proposal form on Bimakendra','pf'); if(r.pf.st==='pending'&&r.pf.mode==='off'&&!r.pf.recv) at('Client sends the filled offline form to you','pfrecv'); if(r.md.st==='pending') at('Client signs the mandate on Bimakendra','md'); }
-  if(l.stage===13){ if(r.pol.st==='pending'){ at('Insurer sends the policy copy and tax invoice (bot)','pol'); at('Desk follow-up or escalation to the insurer','polfu'); } if(r.pol.st==='qc'){ at('Desk passes QC and sends to the client','qc'); at('Insurer wants a corrected proposal form','correct'); } }
-  if(l.stage>=11&&l.stage<=13&&!dead(l)) at('Client withdraws — desk marks the ticket','withdraw');
+  /* [stated 26 Sep · 10.7] the copy and the invoice can arrive separately; the RM checks the copy before it goes out */
+  if(l.stage===13){ if(!r.pol.copy){ at('Insurer sends the policy copy and tax invoice (bot)','pol'); at('Insurer sends the policy copy only','polonly'); at('Desk follow-up or escalation to the insurer','polfu'); } else if(!r.pol.inv) at('Insurer sends the tax invoice','inv'); }
   return b;
 }
 function postSim(k,l){
@@ -139,9 +153,8 @@ function postSim(k,l){
     if(k==='md'){ r.md.st='done'; r.md.at=S.now; var m={id:'MD-'+String(S.data.seq.md++).padStart(3,'0'),acct:a.id,scope:'Account',signedAt:S.now,by:l.contact.n,until:S.now+MD_YEAR,status:'active',doc:'Mandate_'+shortName(a.n).replace(/\s+/g,'')+'.pdf'}; S.data.mandates.push(m); r.md.ref=m.id; logAdd(l,'Mandate signed by the client on Bimakendra','System · row Completed · mandate register written '+m.id+' · account level · valid until '+fmtD(m.until),'post',1); issCheckDocs(l); msg='Mandate signed · register entry '+m.id+' · valid one year'; }
     if(k==='pol'){ issPolicyArrived(l,'bot'); msg='Policy copy and tax invoice in · QC before they go out'; }
     if(k==='polfu'){ if(r.pol.fu<3) r.pol.fu++; else r.pol.esc=Math.min(3,r.pol.esc+1); issMail(l,'insurer','Customer Success',(l.picked||l.ins)+' · POC',(r.pol.esc?'Escalation '+r.pol.esc:'Reminder '+r.pol.fu)+': policy copy — '+a.n,'Following up on the policy copy and tax invoice.'); logAdd(l,(r.pol.esc?'Escalation '+r.pol.esc:'Follow-up '+r.pol.fu)+' to the insurer on the policy copy','System · Customer Success','sys',1); msg=r.pol.fu===3&&r.pol.esc===3?'All six exhausted — Ops contacts the insurer outside the ticket':'Chased with the insurer'; }
-    if(k==='qc'){ issSend(l); msg='Issued · Policy Copy Sent to Client · policy record written · your policy explanation call is set'; }
-    if(k==='correct'){ issCorrection(l); msg='Back to Policy Documents Pending · the proposal form row is open again'; }
-    if(k==='withdraw'){ issWithdraw(l,'Client changed their mind'); msg='Withdrawn · stage frozen at '+stageName(l.stage); }
+    if(k==='polonly'){ issPolicyArrived(l,'bot',true); msg='Policy copy in · tax invoice still awaited'; }
+    if(k==='inv'){ r.pol.inv=1; logAdd(l,'Tax invoice received','System · email bot · from '+(l.picked||l.ins),'sys',1); msg='Tax invoice in · the copy is ready for your check'; }
   },'the simulated event');
   if(!ok) return; paint(); toast('Post-purchase update',msg);
 }
@@ -152,12 +165,13 @@ HANDLERS.push(function(t){ var x=t.closest('[data-psim]'); if(!x) return false; 
 function completeRuleTasks(l,rule){ tasksOfLine(l.id).forEach(function(t){ if(!t.done&&t.rule===rule){ t.done=1; t.doneAt=S.now; t.doneBy=S.user; } }); }
 FLOWS.welcome={t:'Welcome call', sub:'You are the client’s single point of contact from here. The links are already out from a generic BimaKavach address — this call makes the name on that email a person.',
   body:function(){ var l=FL(), r=l.iss?l.iss.rows:null;
-    return [['ok','Reached — introduced myself, explained what is arriving','Links on Bimakendra for the form and mandate'+(r&&r.rhl.mode!=='none'?', the RHL':'')+', then the policy copy and tax invoice'],['sig','Reached — authorised signatory named','Who signs, and whether they can get into Bimakendra'],['off','Reached — offline form explained','They will send the filled proposal form to you'],['acc','Reached — cannot get into Bimakendra','Access has to be provisioned. Urgent, the links are out'],['no','Not reached','Try again — the clock keeps running']].map(function(x){ return opt('data-pick="'+x[0]+'"',S.sel.d===x[0],x[1],x[2]); }).join('')+
-      (S.sel.d==='sig'?field('Authorised signatory',input('sig',S.sel.sig,'Name and designation')):'')+field('Note — optional',input('x',S.sel.x,'Anything the desk should know')); },
-  can:function(){ return !!S.sel.d && (S.sel.d!=='sig'||!!(S.sel.sig||'').trim()); }, ok:'Log the call',
-  run:function(){ var l=FL(), d=S.sel.d; var ok=write(function(){ var tx={ok:'reached · introduced',sig:'reached · signatory '+(S.sel.sig||''),off:'reached · offline form explained',acc:'reached · cannot access Bimakendra',no:'not reached'}[d]; logAdd(l,'Welcome call · '+tx,uname(S.user)+(S.sel.x?' · '+S.sel.x:''),'call'); if(d!=='no') completeRuleTasks(l,'TR-08'); if(d==='sig'&&l.iss) l.iss.signatory=S.sel.sig.trim(); if(d==='acc'&&l.iss){ l.iss.access=1; issMail(l,'rm',uname(S.user),'Customer Success','Bimakendra access — '+acctName(l),'Client cannot get in. Please provision access today; the links are already out.'); } },'the welcome call'); if(!ok) return 'fail'; toast('Welcome call logged',d==='no'?'The task stays open.':(d==='acc'?'Access request sent to the desk on the ticket. Urgent.':'The welcome-call task is complete. Stage unchanged — the ticket moves the line.')); }};
+    return ctcStrip(S.sel.ctc)+[['ok','Reached — introduced myself, explained what is arriving','Links on Bimakendra for the form and mandate'+(r&&r.rhl.mode!=='none'?', the RHL':'')+', then the policy copy and tax invoice'],['date','Reached — will complete by a date','The follow-up moves to that date'],['sig','Reached — authorised signatory named','Who signs, and whether they can get into Bimakendra'],['off','Reached — offline form explained','They will send the filled proposal form to you'],['acc','Reached — cannot get into Bimakendra','Access has to be provisioned. Urgent, the links are out'],['ring','Ringing, no answer','No connect — try again'],['busy','Busy, call cut','No connect — try again'],['swoff','Switched off or unreachable','No connect — try again']].filter(function(x){ var cc=S.sel.ctc; if(!cc) return true; var nc=x[0]==='ring'||x[0]==='busy'||x[0]==='swoff'; return cc.con?!nc:nc; }).map(function(x){ return opt('data-pick="'+x[0]+'"',S.sel.d===x[0],x[1],x[2]); }).join('')+
+      (S.sel.d==='sig'?'<div class="fgrid">'+field('Signatory name',input('sig',S.sel.sig,'Sunita Rane'))+field('Designation',input('sigd',S.sel.sigd,'Director'))+'</div>':'')+
+      (S.sel.d==='date'?field('Will complete by','<input class="inp" id="f_dt" data-f="dt" type="date" min="'+ymd(S.now)+'" value="'+esc(S.sel.dt||'')+'">'):'')+field('Note — optional',input('x',S.sel.x,'Anything the desk should know')); },
+  can:function(){ var d=S.sel.d; return !!d && (d!=='sig'||(!!(S.sel.sig||'').trim()&&!!(S.sel.sigd||'').trim())) && (d!=='date'||(!!S.sel.dt&&S.sel.dt>=ymd(S.now))); }, ok:'Log the call',
+  run:function(){ var l=FL(), d=S.sel.d; var ok=write(function(){ var nc=d==='ring'||d==='busy'||d==='swoff', tx={ok:'reached · introduced',date:'reached · will complete by '+(S.sel.dt?fmtD(new Date(S.sel.dt+'T11:00:00').getTime()):''),sig:'reached · signatory '+(S.sel.sig||'')+', '+(S.sel.sigd||''),off:'reached · offline form explained',acc:'reached · cannot access Bimakendra',ring:'ringing, no answer',busy:'busy, call cut',swoff:'switched off or unreachable'}[d]; logAdd(l,'Welcome call · '+tx,uname(S.user)+(S.sel.ctc?ctcMeta(S.sel.ctc):' · manual')+(S.sel.x?' · '+S.sel.x:''),'call'); if(!nc) completeRuleTasks(l,'TR-08'); if(d==='sig'&&l.iss) l.iss.signatory=S.sel.sig.trim()+', '+S.sel.sigd.trim(); if(d==='date'){ var t9=openRuleTask(l,'TR-09'); if(t9) t9.dueAt=new Date(S.sel.dt+'T11:00:00').getTime(); } if(d==='acc'&&l.iss){ l.iss.access=1; issMail(l,'rm',uname(S.user),'Customer Success','Bimakendra access — '+acctName(l),'Client cannot get in. Please provision access today; the links are already out.'); } },'the welcome call'); if(!ok) return 'fail'; toast('Welcome call logged',(d==='ring'||d==='busy'||d==='swoff')?'The task stays open.':(d==='acc'?'Access request sent to the desk on the ticket. Urgent.':'The welcome-call task is complete. Stage unchanged — the ticket moves the line.')); }};
 
-var CHASE_OUT=[['date','Client will complete by a date','Follow-up moves to that date'],['q','Client has a question','Answered, or relayed to the desk on the ticket'],['sig','Signatory unavailable','Follow-up date, signatory noted'],['acc','Can’t access Bimakendra','Access provisioned — urgent'],['recv','Offline form received','You upload it next'],['no','No response','Counts toward escalation']];
+var CHASE_OUT=[['date','Client will complete by a date','Follow-up moves to that date'],['q','Client has a question','Answered, or relayed to the desk on the ticket'],['sig','Signatory unavailable','Follow-up date, signatory noted'],['acc','Can’t access Bimakendra','Access provisioned — urgent'],['recv','Offline form received','You upload it next'],['no','No response','The chase task stays open — its clock escalates it, not a count']];
 FLOWS.chase2={t:'Chase the proposal form and mandate', sub:'One chase for both. They are two rows on the ticket but one ask of the client.',
   body:function(){ var l=FL(), r=l.iss.rows, pend=[r.pf.st==='pending'?'proposal form ('+(r.pf.mode==='off'?'offline PDF':'Bimakendra link')+')':'',r.md.st==='pending'?'mandate (Bimakendra link)':''].filter(Boolean);
     return note('blue','Still pending',pend.join(' · ')+' · shared '+esc(fmt(r.pf.at||r.md.at))+(r.pf.fu||r.md.fu?' · '+Math.max(r.pf.fu,r.md.fu)+' chases so far':''),'info')+
@@ -178,7 +192,7 @@ FLOWS.chase2={t:'Chase the proposal form and mandate', sub:'One chase for both. 
       if(d==='no'){ l.iss.noresp=(l.iss.noresp||0)+1; }
     },'the chase'); if(!ok) return 'fail';
     /* [stated 24 Sep · TBD-23] three missed follow-ups, then it escalates to the RM's manager */
-    toast('Chase logged',d==='date'||d==='sig'?'Follow-up set for '+fmtD(new Date(S.sel.dt+'T11:00:00').getTime())+'. Stage unchanged.':(d==='q'?'Relayed to the desk on the ticket’s RM thread.':(d==='recv'?'Upload the form next — it is the one thing only you can do.':(d==='no'?(l.iss.noresp||0)+' of '+CHASE_ESC+' with no response'+((l.iss.noresp||0)>=CHASE_ESC?' — escalated to your manager.':' — it escalates to your manager at '+CHASE_ESC+'.'):'Stage unchanged — the ticket moves the line.')))); }};
+    toast('Chase logged',d==='date'||d==='sig'?'Follow-up set for '+fmtD(new Date(S.sel.dt+'T11:00:00').getTime())+'. Stage unchanged.':(d==='q'?'Relayed to the desk on the ticket’s RM thread.':(d==='recv'?'Upload the form next — it is the one thing only you can do.':(d==='no'?'No response. The chase task stays open; if it runs past its time it escalates to your manager.':'Stage unchanged — the ticket moves the line.')))); }};
 
 FLOWS.uploadPf={t:'Upload the filled proposal form', sub:'The client filled the insurer’s PDF and sent it to you. Uploading it completes the row — if it was the last document outstanding, the line moves on by itself.',
   body:function(){ var l=FL(); return field('File','<div class="chip neutral" style="width:100%;justify-content:flex-start">'+ic('file','ic14')+'ProposalForm_'+esc(shortName(acctName(l)).replace(/\s+/g,''))+'_'+esc(l.product.split(' ')[0])+'_signed.pdf · 1.4 MB</div>')+
@@ -188,11 +202,11 @@ FLOWS.uploadPf={t:'Upload the filled proposal form', sub:'The client filled the 
   can:function(){ return !S.sel.inc; }, ok:'Upload to the ticket',
   run:function(){ var l=FL(); var ok=write(function(){ var r=l.iss.rows; r.pf.st='done'; r.pf.recv=0; r.pf.at=S.now; logAdd(l,'Filled proposal form uploaded to the ticket',uname(S.user)+' · row Completed','post'); completeRuleTasks(l,'TR-09'); issCheckDocs(l); },'the upload'); if(!ok) return 'fail'; toast('Proposal form uploaded',l.stage===13?'That was the last document — policy copy requested, line at Awaiting Policy Copy.':'Row Completed. '+(l.iss.rows.md.st==='pending'?'The mandate is still with the client.':(l.iss.rows.rhl.st==='pending'?'The RHL is still with the insurer.':''))); }};
 
-FLOWS.reshare={t:'Re-share a link or document', sub:'The client says it never arrived. Everything sent is on the RM interface — re-share from here; the send is logged.',
+FLOWS.reshare={t:'Ask the desk to resend', sub:'The client says it never arrived. The desk resends it from the generic address; your ask is on the RM ↔ desk thread.',
   body:function(){ var l=FL(), r=l.iss.rows, items=[]; if(r.pf.st==='pending') items.push(['pf',r.pf.mode==='off'?'Proposal form PDF':'Proposal form link']); if(r.md.st==='pending') items.push(['md','Mandate letter link']); if(r.rhl.st==='sent') items.push(['rhl','Risk-held letter']); if(r.pol.st==='sent') items.push(['pol','Policy copy and tax invoice']);
     return items.length?items.map(function(x){ return opt('data-pick="'+x[0]+'"',S.sel.d===x[0],x[1],''); }).join('')+field('Channel',select('ch',S.sel.ch||'Email',['Email','WhatsApp'])):note('neutral','','Nothing is pending with the client on this line.'); },
-  can:function(){ return !!S.sel.d; }, ok:'Re-share',
-  run:function(){ var l=FL(); var ok=write(function(){ var nm={pf:'proposal form',md:'mandate letter',rhl:'RHL',pol:'policy copy and tax invoice'}[S.sel.d]; issMail(l,'client',uname(S.user),l.contact.e||l.contact.n,'Re-sent: '+nm+' — '+acctName(l),'As discussed, here it is again.'); logAdd(l,'Re-shared the '+nm+' with the client',uname(S.user)+' · '+(S.sel.ch||'Email')+' · send logged','post'); },'the re-share'); if(!ok) return 'fail'; toast('Re-shared','Logged on the ticket’s client thread.'); }};
+  can:function(){ return !!S.sel.d; }, ok:'Ask the desk',
+  run:function(){ var l=FL(); var ok=write(function(){ var nm={pf:'proposal form',md:'mandate letter',rhl:'RHL',pol:'policy copy and tax invoice'}[S.sel.d]; issMail(l,'rm',uname(S.user),'Customer Success','Please resend: '+nm+' — '+acctName(l),'The client says it never arrived. Please resend by '+(S.sel.ch||'Email')+'.'); logAdd(l,'Asked the desk to resend the '+nm,uname(S.user)+' · on the RM ↔ desk thread','desk'); },'the ask'); if(!ok) return 'fail'; toast('Asked the desk to resend','On the RM ↔ desk thread.'); }};
 
 FLOWS.explain={t:'Policy explanation call', sub:'The client has the policy copy and tax invoice. Walk them through the cover, exclusions and how to claim.',
   body:function(){ return [['ok','Done — cover explained','Steady state from here'],['later','Client asked for another time','Follow-up date'],['no','Not reached','The clock keeps running']].map(function(x){ return opt('data-pick="'+x[0]+'"',S.sel.d===x[0],x[1],x[2]); }).join('')+(S.sel.d==='later'?field('Call again on','<input class="inp" id="f_dt" data-f="dt" type="date" min="'+ymd(S.now)+'" value="'+esc(S.sel.dt||'')+'">'):'')+field('Note — optional',input('x',S.sel.x,'Questions the client raised')); },
@@ -208,15 +222,18 @@ function postRowsTable(l,can){
   var dc={line:l.id,acct:acctOf(l)?acctOf(l).id:''};
   if(r.rhl.st!=='na') rows.push(['Risk-held letter',r.rhl.mode==='sys'?'System-generated':'From '+esc(l.picked||l.ins)+' by email',stChip(r.rhl.st,r.rhl.mode),r.rhl.st==='pending'?'Pending on the insurer':'', r.rhl.fu, r.rhl.st==='sent'?docView1('Risk-held letter',dc):(r.rhl.st==='pending'?'<span class="meta" style="white-space:nowrap">chased by the desk</span>':'')]);
   if(r.pf.st!=='na') rows.push(['Proposal form',r.pf.mode==='dig'?'Digitised · Bimakendra':'Offline · insurer PDF',stChip(r.pf.st,r.pf.mode),r.pf.st==='pending'?(r.pf.recv?'<span class="amber">Filled copy with the RM</span>':'Pending'):(r.pf.st==='done'?'Completed':''), r.pf.fu, r.pf.st==='pending'?(r.pf.mode==='off'&&can?'<button class="btn sm'+(r.pf.recv?' primary':'')+'" data-flow="uploadPf" data-line="'+l.id+'">Upload</button> ':'')+docView1(r.pf.mode==='dig'?'Proposal form':'Proposal form PDF',dc):(r.pf.st==='done'?docView1('Filled proposal form',dc):'')]);
-  rows.push(['Mandate letter',r.md.mode==='file'?'On file · '+esc(r.md.ref):'Digitised · Bimakendra',stChip(r.md.st,r.md.mode),r.md.st==='pending'?'Pending':(r.md.st==='done'?'Completed':(r.md.mode==='file'?'Not asked again':'')), r.md.fu, (r.md.st==='done'||r.md.mode==='file')?docView1('Mandate letter',{line:dc.line,acct:dc.acct,ref:r.md.ref}):(r.md.st==='pending'?docView1('Mandate letter',dc):'')]);
-  rows.push(['Policy copy and tax invoice',esc(l.picked||l.ins||'—'),r.pol.st==='na'?chip('After the documents','neutral',false,true):(r.pol.st==='pending'?chip('Pending on insurer','violet',true,true):(r.pol.st==='qc'?chip('Received · in QC','violet',true,true):chip('Sent to client','green',true,true))),r.pol.st==='pending'?'Requested by the desk':(r.pol.st==='qc'?'Post-purchase QC':''), r.pol.fu+(r.pol.esc?' + '+r.pol.esc+' esc.':''), r.pol.st==='sent'?docView1('Policy copy',dc,'Policy copy')+' '+docView1('Tax invoice',dc,'Tax invoice'):'']);
-  return '<div class="tw"><table class="t"><thead><tr><th>Requirement</th><th>How</th><th>Status</th><th>Sub-status</th><th class="num">Follow-ups</th><th></th></tr></thead><tbody>'+rows.map(function(x){ return '<tr><td class="nm">'+x[0]+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td><td>'+x[3]+'</td><td class="num">'+(x[4]||'<span class="meta">0</span>')+'</td><td class="right">'+x[5]+'</td></tr>'; }).join('')+'</tbody></table></div>'+
-    '<div class="meta mt8">A requirement that does not apply is not shown. RHL is chased with the insurer by the desk; proposal form and mandate are chased with the client by you; the policy copy with the insurer by the desk.</div>';
+  if(r.md.mode!=='file') rows.push(['Mandate letter','Digitised · Bimakendra',stChip(r.md.st,r.md.mode),r.md.st==='pending'?'Pending':(r.md.st==='done'?'Completed':(r.md.mode==='file'?'Not asked again':'')), r.md.fu, (r.md.st==='done'||r.md.mode==='file')?docView1('Mandate letter',{line:dc.line,acct:dc.acct,ref:r.md.ref}):(r.md.st==='pending'?docView1('Mandate letter',dc):'')]);
+  rows.push(['Policy copy and tax invoice',esc(l.picked||l.ins||'—'),r.pol.st==='na'?chip('After the documents','neutral',false,true):(r.pol.st==='pending'?chip('Pending on insurer','violet',true,true):(r.pol.st==='qc'?chip('Received · in QC','violet',true,true):chip('Sent to client','green',true,true))),r.pol.st==='pending'?'Requested from '+esc(l.picked||l.ins)+' · '+esc(fmtD(r.pol.at)):(r.pol.st==='qc'?(r.pol.inv?'Waiting for your check':'Copy in · tax invoice awaited'):''), r.pol.fu+(r.pol.esc?' + '+r.pol.esc+' esc.':''), r.pol.st==='sent'?docView1('Policy copy',dc,'Policy copy')+' '+docView1('Tax invoice',dc,'Tax invoice'):'']);
+  var withWhom={'Risk-held letter':r.rhl.st==='pending'?'Insurer':'','Proposal form':r.pf.st==='pending'?(r.pf.recv?'You':'Client'):'','Mandate letter':r.md.st==='pending'?'Client':'','Policy copy and tax invoice':r.pol.st==='pending'?'Insurer':(r.pol.st==='qc'?'You':'')};
+  var lastAt={'Risk-held letter':r.rhl.at,'Proposal form':r.pf.at,'Mandate letter':r.md.at,'Policy copy and tax invoice':r.pol.at};
+  return '<div class="tw"><table class="t"><thead><tr><th>Requirement</th><th>Status</th><th>With</th><th>Last action</th></tr></thead><tbody>'+rows.map(function(x){ var k=String(x[0]); return '<tr><td class="nm" style="white-space:nowrap">'+x[0]+'<div class="sub" title="'+esc(String(x[1]).replace(/<[^>]+>/g,''))+'">'+x[1]+'</div></td><td>'+x[2]+'</td><td>'+(withWhom[k]?esc(withWhom[k]):'<span class="meta">—</span>')+'</td><td style="white-space:nowrap">'+(x[3]?x[3]+(lastAt[k]?' <span class="meta">· '+esc(fmtDs(lastAt[k]))+'</span>':''):(lastAt[k]?esc(fmtD(lastAt[k])):'<span class="meta">—</span>'))+'</td></tr>'; }).join('')+'</tbody></table></div>'+
+    (r.md.mode==='file'?'<div class="meta mt8">No mandate row — one is on file for the account ('+esc(r.md.ref)+').</div>':'')+
+    '';
 }
 function mailTrail(l){
-  var i=l.iss, th=S.ui['mth_'+l.id]||'all', ms=i.mail.filter(function(m){return th==='all'||m.th===th;}).slice().sort(function(x,y){return y.at-x.at;});
+  var i=l.iss, th=S.ui['mth_'+l.id]||'all', q=(S.ui['mq_'+l.id]||'').toLowerCase(), ms=i.mail.filter(function(m){return (th==='all'||m.th===th)&&(!q||(m.subj+' '+m.body+' '+m.from+' '+m.to).toLowerCase().indexOf(q)>=0);}).slice().sort(function(x,y){return y.at-x.at;});
   var cnt=function(k){ return i.mail.filter(function(m){return m.th===k;}).length; };
-  return '<div class="flex wrap"><div class="h3">Mail trail</div><span class="sp"></span>'+pills('mth_'+l.id,th,[['all','All',i.mail.length],['client','Client',cnt('client')],['rm','RM ↔ desk',cnt('rm')],['insurer','Insurer',cnt('insurer')]])+'</div>'+
+  return '<div class="flex wrap" style="gap:10px"><div class="h3">Mail trail</div><span class="sp"></span><input class="inp" style="max-width:200px" id="mq_'+l.id+'" data-ui="mq_'+l.id+'" placeholder="Search the mail" value="'+esc(S.ui['mq_'+l.id]||'')+'">'+pills('mth_'+l.id,th,[['all','All',i.mail.length],['client','Client',cnt('client')],['rm','RM ↔ desk',cnt('rm')],['insurer','Insurer',cnt('insurer')]])+(canAct(l)?'<button class="btn sm" data-flow="deskMail" data-line="'+l.id+'">Write to the desk</button>':'')+'</div>'+
     '<div class="meta mt8">Three conversations, one thread each. The client thread goes out from a generic BimaKavach address and names '+esc(uname(l.owner))+'; the desk writes to the RM and to the insurer as Customer Success.</div>'+
     (ms.length?'<div class="msgs mt12">'+ms.map(function(m){ var out=m.from===uname(S.user)||m.from===GENERIC_FROM||m.from==='Customer Success'; return '<div class="msg '+(m.th==='client'?'out':(m.from==='Customer Success'||m.from===GENERIC_FROM||m.from===uname(S.user)?'out':'in'))+'"><div class="w"><b>'+esc(m.from)+'</b> → '+esc(m.to)+' · '+chip(m.th==='client'?'Client':(m.th==='rm'?'RM':'Insurer'),'neutral',false,true)+' · '+esc(fmt(m.at))+'</div><b>'+esc(m.subj)+'</b><div class="mt8" style="font-size:var(--fs-base)">'+esc(m.body)+'</div></div>'; }).join('')+'</div>':'<div class="mt12">'+empty('mail','Nothing sent yet','Mail starts when the desk assigns the ticket and the tracks begin.')+'</div>');
 }
@@ -224,52 +241,53 @@ function mailTrail(l){
    proposal form, mandate letter, RHL, policy copy and tax invoice, each to view
    and download. The requirements table above is the chase; this is the shelf. */
 function postDocs(l){
-  var i=l.iss, r=i.rows, a=acctOf(l), dc={line:l.id,acct:a?a.id:''}, rows=[];
-  var pol=(a&&a.pols||[]).filter(function(p){return p.line===l.id;})[0];
-  if(r.pf.st!=='na') rows.push(['Proposal form', r.pf.st==='done', r.pf.mode==='dig'?'With the client on Bimakendra':'With the client — the insurer’s PDF, to be filled and signed',
-    r.pf.st==='done'?(r.pf.mode==='dig'?'Filled on Bimakendra · '+fmtD(r.pf.at):'Filled offline, uploaded by the RM · '+fmtD(r.pf.at)):'', dc]);
+  var i=l.iss, r=i.rows, a=acctOf(l), dc={line:l.id,acct:a?a.id:''}, rows=[], md=r.md.ref?(S.data.mandates||[]).filter(function(m){return m.id===r.md.ref;})[0]:null;
+  var pol=(a&&a.pols||[]).filter(function(p){return p.line===l.id;})[0], NR='Not required for this product';
+  /* [stated 26 Sep · 10.13] always five documents; one that does not apply says so */
+  rows.push(['Proposal form', r.pf.st==='done', r.pf.st==='na'?NR:(r.pf.recv?'With the RM — the client sent the filled form; upload it':(r.pf.mode==='dig'?'With the client on Bimakendra':'With the client — the insurer’s PDF, to be filled and signed')),
+    r.pf.st==='done'?(r.pf.mode==='dig'?'Filled on Bimakendra · '+fmtD(r.pf.at):'Filled offline, uploaded by the RM · '+fmtD(r.pf.at)):'', dc, r.pf.st==='na']);
   rows.push(['Mandate letter', r.md.st==='done'||r.md.mode==='file', 'With the client on Bimakendra',
-    r.md.mode==='file'?'Already on the register · '+esc(r.md.ref)+' — not asked again':(r.md.st==='done'?'Signed on Bimakendra · '+fmtD(r.md.at)+' · register entry '+esc(r.md.ref):''),
-    {line:dc.line,acct:dc.acct,ref:r.md.ref}]);
-  if(r.rhl.st!=='na') rows.push(['Risk-held letter', r.rhl.st==='sent', 'With '+((l.picked||l.ins)||'the insurer')+' — the desk is chasing it',
-    r.rhl.st==='sent'?(r.rhl.mode==='sys'?'System-generated · '+fmtD(r.rhl.at):'From '+esc(l.picked||l.ins)+' by email · '+fmtD(r.rhl.at)):'', dc]);
-  rows.push(['Policy copy', r.pol.st==='sent', r.pol.st==='qc'?'Received — in post-purchase QC':'With the insurer — the desk is chasing it',
-    r.pol.st==='sent'?'Passed QC and sent to the client'+(pol&&pol.pno?' · '+esc(pol.pno):''):'', pol?{line:dc.line,acct:dc.acct,pol:pol.id}:dc]);
-  rows.push(['Tax invoice', r.pol.st==='sent', 'Comes with the policy copy', r.pol.st==='sent'?'Sent to the client with the copy':'', pol?{line:dc.line,acct:dc.acct,pol:pol.id}:dc]);
-  var held=rows.filter(function(x){return x[1];}).length;
-  return '<div class="phhd"><div class="t">Documents</div><div class="a">'+held+' of '+rows.length+' on file</div></div>'+
-    '<div class="rowlist doclist mt12">'+rows.map(function(x){ return docRow(x[0],x[1],x[2],x[4],x[3]?esc(x[3]):''); }).join('')+'</div>'+
-    '<div class="meta mt8">A document that does not apply to this product is not listed, so <b>Not on file</b> always means somebody still owes it. The account’s PAN, GST and mandates sit on the account under <b>Compliance documents</b>.</div>';
+    r.md.mode==='file'?'Mandate on file — signed '+(md?fmtD(md.signedAt)+(md.by?' by '+md.by:''):'earlier')+' · '+esc(r.md.ref):(r.md.st==='done'?'Signed '+fmtD(r.md.at)+(md&&md.by?' by '+md.by:'')+' · register entry '+esc(r.md.ref):''),
+    {line:dc.line,acct:dc.acct,ref:r.md.ref}, false]);
+  rows.push(['Risk-held letter', r.rhl.st==='sent', r.rhl.st==='na'?NR:'With '+((l.picked||l.ins)||'the insurer')+' — the desk is chasing it',
+    r.rhl.st==='sent'?(r.rhl.mode==='sys'?'System-generated · '+fmtD(r.rhl.at):'From '+esc(l.picked||l.ins)+' by email · '+fmtD(r.rhl.at)):'', dc, r.rhl.st==='na']);
+  rows.push(['Policy copy', r.pol.st==='sent', r.pol.st==='qc'?'Received — waiting for the RM’s check':'With the insurer — the desk is chasing it',
+    r.pol.st==='sent'?'Sent to the client'+(pol&&pol.pno?' · '+esc(pol.pno):''):'', pol?{line:dc.line,acct:dc.acct,pol:pol.id}:dc, false]);
+  rows.push(['Tax invoice', r.pol.st==='sent', r.pol.copy&&!r.pol.inv?'Awaited from the insurer':'With the insurer', r.pol.st==='sent'?'Sent to the client with the copy':'', pol?{line:dc.line,acct:dc.acct,pol:pol.id}:dc, false]);
+  var need=rows.filter(function(x){return !x[5];}), held=need.filter(function(x){return x[1];}).length;
+  return '<div class="phhd"><div class="t">Documents</div><div class="a">'+held+' of '+need.length+' on file</div></div>'+
+    '<div class="rowlist doclist mt12">'+rows.map(function(x){ return x[5]?'<div class="row dim"><div class="bd"><b>'+esc(x[0])+'</b><div class="m">'+NR+'</div></div></div>':docRow(x[0],x[1],x[2],x[4],x[3]?esc(x[3]):''); }).join('')+'</div>'+
+    '<div class="meta mt8">PAN, GST and mandates are under <button class="link" data-uiset="atab_'+dc.acct+'" data-uv="comp" data-go="acct" data-id="'+dc.acct+'">Compliance</button>.</div>';
 }
 function postTab(l){
   var can=canAct(l), i=l.iss;
-  return '<div class="phhd"><div class="t">Post-purchase</div><div class="a">'+esc(i.id)+' · '+esc(ISS_STAGE[i.stage])+' · '+(i.assignedAt?'assigned '+esc(fmt(i.assignedAt)):'created '+esc(fmt(i.createdAt))+', not assigned yet')+'</div></div>'+
+  return '<div class="phhd"><div class="t">Post-purchase</div><div class="a">'+esc(i.id)+' · '+esc(ISS_STAGE[i.stage])+' · desk owner '+esc(CS_NAME)+' · '+(i.assignedAt?'assigned '+esc(fmt(i.assignedAt)):'created '+esc(fmt(i.createdAt))+', not assigned yet')+'</div></div>'+
     '<div class="mt12">'+postRowsTable(l,can)+'</div>'+
     (i.signatory?'<div class="meta mt8">Authorised signatory: <b>'+esc(i.signatory)+'</b></div>':'')+(i.access?'<div class="mt8">'+note('red','Bimakendra access','The client cannot get in. Access provisioning has been asked of the desk — urgent, the links are out.','alert')+'</div>':'')+
     diamonds(true)+postDocs(l)+
-    '<div class="meta mt12">The mail on this ticket is on the <b>Mail trail</b> tab; reminders, reassignment and the review queue are under <b>Manage</b>.</div>';
+    '';
 }
 /* [stated 23 Sep] the ticket's record actions live on the line's Manage tab, beside the line's own */
 function manageTicketBlock(l){
   return '<div class="h3">Manage ticket</div><div class="meta">'+esc(l.iss.id)+' · '+esc(ISS_STAGE[l.iss.stage])+' — the desk works these, not you.</div><div class="rowlist mt8" style="border:1px solid var(--border);border-radius:12px">'+
     '<div><div class="bd"><b>Reminders and escalations</b><div class="m">By section: forms with the RM, RHL with the insurer, policy copy with the insurer. Each has its own reminder.</div></div><div class="rt">'+chip('Customer Success','neutral',false,true)+'</div></div>'+
-    '<div><div class="bd"><b>Reassign ticket · Mark customer withdrawn</b><div class="m">The only two record actions on the ticket. Both are the desk’s, not yours.</div></div><div class="rt">'+chip('Customer Success','neutral',false,true)+'</div></div>'+
+    '<div><div class="bd"><b>Reassign ticket</b><div class="m">The desk’s record action, not yours. Nothing after payment withdraws — a policy is never deleted.</div></div><div class="rt">'+chip('Customer Success','neutral',false,true)+'</div></div>'+
     '<div><div class="bd"><b>Manual review queue</b><div class="m">An insurer reply the bot tied to this ticket but would not attach on its own — a policy-number mismatch, say — waits there to be attached by hand.</div></div><div class="rt">'+chip('Desk','neutral',false,true)+'</div></div></div>';
 }
 
 /* ---------- the ISS ticket screen (Tickets → ticket flow) ---------- */
 function issTicketScreen(t){
   var l=t.line, a=acctOf(l), i=l.iss, u=me(), can=canAct(l), na=postNextAction(l), w=issWaiting(l);
-  var steps=[['new','Created at Payment Completed',i.createdAt],['assigned','Assigned · tracks started',i.assignedAt],['docs',i.skip12?'Nothing to collect':'Documents collected',issAllDocsIn(l)&&i.assignedAt?1:0],['await','Policy copy requested',i.rows.pol.st!=='na'?1:0],['closed',i.stage==='withdrawn'?'Withdrawn':'Policy copy and tax invoice sent · closed',i.stage==='closed'||i.stage==='withdrawn'?1:0]];
+  var steps=[['new','Created at Payment Completed',i.createdAt],['assigned','Assigned · tracks started',i.assignedAt],['docs',i.skip12?'Nothing to collect':'Documents collected',issAllDocsIn(l)&&i.assignedAt?1:0],['await','Policy copy requested',i.rows.pol.st!=='na'?1:0],['closed','Policy copy and tax invoice sent · closed',i.stage==='closed'?1:0]];
   var cur=-1; steps.forEach(function(s,k){ if(s[2]) cur=k; });
-  var html='<div class="crumbs"><button data-go="tickets">Tickets</button>'+ic('chevright','ic14')+'<button data-go="line" data-id="'+l.id+'">'+esc(l.id)+'</button>'+ic('chevright','ic14')+'<b>'+esc(i.id)+'</b></div>'+
-    '<div class="hdrow"><div><div class="h1">'+esc(i.id)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>'+esc(l.product)+'</span><span class="sep">·</span>'+chip('Post-purchase · BimaOps','neutral',false,true)+chip(ISS_STAGE[i.stage],t.tone,true,true)+chip('Waiting on '+w,waitTone(w),false,true)+'</div></div><span class="sp"></span>'+
-      '<div class="acts">'+(t.act&&can?'<button class="btn primary sm" data-flow="'+t.act+'" data-line="'+l.id+'">'+esc(t.actLbl)+'</button>':'')+'<button class="btn sm" data-go="line" data-id="'+l.id+'">Open the line</button></div></div>'+
+  var html='<div class="crumbs"><button data-back="1">'+ic('arrowleft','ic14')+' Back</button></div>'+
+    '<div class="hdrow"><div><div class="h1">'+esc(i.id)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>'+esc(l.product)+'</span><span class="sep">·</span><span>Raised by the system at Payment Completed</span><span class="sep">·</span>'+chip('Issuance · BimaOps','neutral',false,true)+chip(ISS_STAGE[i.stage],t.tone,true,true)+chip('Waiting on '+w,waitTone(w),false,true)+'</div></div><span class="sp"></span>'+
+      '<div class="acts"></div></div>'+
     (t.pend?'<div class="banner amber mt12">'+ic('alert','ic14')+'<span>'+esc(t.pend)+'</span></div>':'')+
     (!can&&i.stage!=='closed'?'<div class="banner neutral mt12">'+ic('eye','ic14')+'<span>Read-only. '+esc(readOnlyWhy(l)||'The desk works the ticket; the RM chases the client.')+'</span></div>':'')+
     diamonds()+
     '<div class="two"><div class="rail">'+
-      '<div class="clock '+(i.stage==='closed'?'green':(w==='Us'?'red':'blue'))+'"><div class="top"><span>Ticket clock</span><span class="own">'+esc(CS_NAME)+'</span></div><div class="hl">'+(i.stage==='closed'||i.stage==='withdrawn'?ISS_STAGE[i.stage]:plural(daysBetween(i.createdAt,S.now),'day')+' open')+'</div><div class="bar"><i style="width:'+Math.round((cur+1)/steps.length*100)+'%"></i></div><div class="l1">'+esc(ISS_STAGE[i.stage])+'<span> · line at '+esc(stageName(l.stage))+'</span></div><div class="l2">'+ic('clock','ic14')+'Created '+esc(fmt(i.createdAt))+'</div></div>'+
+      '<div class="clock '+(i.stage==='closed'?'green':(w==='Us'?'red':'blue'))+'"><div class="top"><span>Ticket clock</span><span class="own">'+esc(CS_NAME)+'</span></div><div class="hl">'+(i.stage==='closed'?ISS_STAGE[i.stage]:plural(daysBetween(l.enteredAt,S.now),'day')+' at this stage')+'</div><div class="bar"><i style="width:'+Math.round((cur+1)/steps.length*100)+'%"></i></div><div class="l1">'+esc(ISS_STAGE[i.stage])+'<span> · line at '+esc(stageName(l.stage))+'</span></div><div class="l2">'+ic('clock','ic14')+'Created '+esc(fmt(i.createdAt))+'</div></div>'+
       '<div class="na '+na.tone+'"><div class="k">'+esc(na.lab||'Next action')+'</div><div class="i">'+esc(na.txt)+'</div>'+(na.why?'<div class="w">'+esc(na.why)+'</div>':'')+(can&&na.acts.length?'<div class="acts"><button class="btn primary lg full" data-flow="'+na.acts[0][0]+'" data-line="'+l.id+'">'+esc(na.acts[0][1])+'</button>'+(na.acts.length>1?'<div class="sec">'+na.acts.slice(1).map(function(x){return '<button class="btn sm" data-flow="'+x[0]+'" data-line="'+l.id+'">'+esc(x[1])+'</button>';}).join('')+'</div>':'')+'</div>':'')+'</div>'+
       (can&&postSims(l).length?simblock('Simulate the desk, the client or the insurer','What happens off this screen — on BimaOps, Bimakendra or in the insurer’s inbox.',postSims(l).join('')):'')+
     '</div><div class="pane"><div class="pb">'+
@@ -280,7 +298,7 @@ function issTicketScreen(t){
       '<div class="rowlist doclist mt8">'+[i.rows.rhl.st==='sent'?'Risk-held letter':'',i.rows.pf.st==='done'?'Filled proposal form':'',i.rows.md.st==='done'?'Mandate letter':'',i.rows.pol.copy?'Policy copy':'',i.rows.pol.inv?'Tax invoice':'','PAN card','GST certificate','Payment proof'].filter(Boolean).map(function(d){ return docRow(d,true,'',{line:l.id,acct:a.id,ref:d==='Mandate letter'?i.rows.md.ref:''}); }).join('')+'</div>'+
       diamonds(true)+mailTrail(l)+
     '</div></div></div>';
-  return {sc:'Post-purchase ticket', ctx:i.id, html:html, cta: isRole('rm')?'<button class="btn primary sm" data-go="svcnew">'+ic('plus')+'Raise request</button>':'<button class="btn primary sm" data-flow="raiseReq">'+ic('plus')+'Raise request</button>'};
+  return {sc:'Post-purchase ticket', ctx:i.id, html:html, cta: raiseLines().length?'<button class="btn primary sm" data-flow="pickTicket">'+ic('plus')+'Raise ticket</button>':''};
 }
 
 /* ---------- RM Home ---------- */
@@ -291,7 +309,7 @@ function renewalsFor(accts,days){ var out=[]; accts.forEach(function(a){ a.pols.
 /* [stated 23 Sep] the renewal line for a policy is the one that carries that policy id */
 function rmHome(uid){
   var mine=S.data.lines.filter(function(l){return l.owner===uid&&!dead(l);}), accts=rmAccounts(uid), b={fresh:[],ren:[],late:[]};
-  mine.forEach(function(l){ if(openLine(l)&&l.stage===1&&!attempts(l)) b.fresh.push({l:l,k:'sale',at:l.assignedAt}); else if(postLine(l)&&openRuleTask(l,'TR-08')) b.fresh.push({l:l,k:'post',at:l.paidAt||l.enteredAt}); });
+  mine.forEach(function(l){ if(isNewly(l)) b.fresh.push({l:l,k:'sale',at:l.reAt||l.assignedAt}); else if(postLine(l)&&openRuleTask(l,'TR-08')) b.fresh.push({l:l,k:'post',at:l.paidAt||l.enteredAt}); });
   b.fresh.sort(function(x,y){return x.at-y.at;});
   b.ren=renewalsFor(accts,90);
   var order={esc:0,over:1,today:2}; myTasks(uid).forEach(function(t){ var st=taskState(t); if(order[st]!==undefined) b.late.push(t); });
@@ -305,15 +323,17 @@ function rmBuckets(uid){
   /* 1 · newly assigned: handed over at payment with no welcome call yet, or a sales line nobody has called */
   mine.forEach(function(l){ if(dead(l)) return;
     if(l.stage===11 && openRuleTask(l,'TR-08')){ b.fresh.push({l:l,k:'post'}); used[l.id]=1; }
-    else if(openLine(l) && l.stage===1 && !attempts(l)){ b.fresh.push({l:l,k:'sale'}); used[l.id]=1; } });
-  b.fresh.sort(function(x,y){return (x.l.paidAt||x.l.assignedAt)-(y.l.paidAt||y.l.assignedAt);});
+    else if(isNewly(l)){ b.fresh.push({l:l,k:'sale'}); used[l.id]=1; } });
+  b.fresh.sort(function(x,y){return (y.l.reAt||y.l.paidAt||y.l.assignedAt)-(x.l.reAt||x.l.paidAt||x.l.assignedAt);});
   /* 2 · renewals: my renewal lines still to renew, soonest expiry first — the system opens one 90 days out */
   b.ren=renLines(uid).filter(renDue).sort(function(x,y){ var a=renPolHit(x), c=renPolHit(y); return (a?a.p.exp:0)-(c?c.p.exp:0); }); b.ren.forEach(function(l){ used[l.id]=1; });
   /* 3 · overdue tasks */
   myTasks(uid).forEach(function(t){ var st=taskState(t); if(order[st]!==undefined) b.late.push(t); });
   b.late.sort(function(x,y){ return (order[taskState(x)]-order[taskState(y)]) || (x.dueAt-y.dueAt); });
   /* 4 · action required: the stage or the ticket needs me */
-  mine.forEach(function(l){ if(used[l.id]||dead(l)||l.stage===14) return; if(l.status==='park'){ if(l.revisit<=S.now){ b.move.push({l:l}); used[l.id]=1; } return; } if(actingParty(l)==='Us'){ b.move.push({l:l}); used[l.id]=1; } });
+  /* [stated 26 Sep · 17.3] also: a chase past its follow-up date, the QC check, the policy explanation call */
+  mine.forEach(function(l){ if(used[l.id]||dead(l)) return; if(l.stage===14){ if(openRuleTask(l,'TR-10')){ b.move.push({l:l}); used[l.id]=1; } return; } if(l.status==='park'){ if(l.revisit<=S.now){ b.move.push({l:l}); used[l.id]=1; } return; }
+    var fu=l.stage===12?nextFollowUp(l):0; if(actingParty(l)==='Us'||(fu&&fu<S.now)){ b.move.push({l:l}); used[l.id]=1; } });
   S.data.svc.forEach(function(t){ var a=acctOf(t.acct); if(a&&a.own===uid&&!svcClosed(t)&&svcNeed(t)) b.move.push({t:t}); });
   /* 5 · quiet: with someone else and silent for 30 days */
   mine.forEach(function(l){ if(used[l.id]||dead(l)||l.stage===14||l.status==='park') return; if(daysQuiet(l)>=QUIET_DAYS) b.quiet.push(l); });
@@ -349,13 +369,13 @@ SCREENS.rmhome=function(){
     (n?'':'<div class="mt16">'+empty('circlecheck','Nothing needs you today','No task is due or overdue, nothing is newly handed over, nothing renews in the next 90 days and no line is sitting on you.','<button class="btn" data-go="pipeline">Open Pipeline</button>')+'</div>')+
     '<div class="hgap">'+
     hFreshCard(fresh)+
-    (b.ren.length?hCard('ren','amber','refresh','Renewal management', renRows,
+    (1?hCard('ren','amber','refresh','Renewal management', renRows,
       hSeg('rmb',rb,RB.map(function(x){ return [x[0],x[1],renBucket(x[0]).length]; })), 'Nothing in this window.'):'')+
     hTaskCard(tk)+
-    (b.move.length?hCard('move','amber','zap','Action required', b.move.map(function(x){
+    (1?hCard('move','amber','zap','Action required', b.move.map(function(x){
         if(x.t){ var t=x.t, a=acctOf(t.acct); return '<div class="hrow row" data-go="svctix" data-id="'+t.id+'"><div class="bd"><div class="tt">'+esc(t.id)+' <span class="pr">· '+esc(t.sub)+'</span></div><div class="mt">'+chip('Needs your reply','amber',true,true)+'<span>'+esc(a?shortName(a.n):'')+' · '+esc(t.prod)+'</span></div></div><div class="rt">'+ic('chevright')+'</div></div>'; }
         return hLineRow(x.l,'<span>'+esc(nextAction(x.l).txt)+'</span>'); }), chip(b.move.length,'amber',false,true)):'')+
-    (b.quiet.length?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
+    (1?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
     '</div>';
   return {sc:'Home', html:html};
 };
@@ -366,7 +386,7 @@ function rmStats(u){
     ren:renewalsFor(accts,60).length, esc:tk.filter(function(t){return taskState(t)==='esc';}).length, over:tk.filter(function(t){return taskState(t)==='over';}).length, force:accts.reduce(function(s,a){return s+premInForce(a);},0)};
 }
 SCREENS.rmteam=function(){
-  var u=me(); if(u.role!=='rmhead') return {sc:'Team', html:empty('lock','Head of RM only','The RM team view shows every post-purchase line, renewal and service ticket across the RMs.','<button class="btn" data-go="rmhome">Home</button>')};
+  var u=me(); if(u.role!=='rmhead') return noAccess('screen');
   /* [stated 23 Sep] escalated tasks first, then the stalled lines, then renewals with nothing started. */
   var team=rmTeam(u.id), ids=team.map(function(x){return x.id;});
   var post=S.data.lines.filter(function(l){return ids.indexOf(l.owner)>=0&&postLine(l);});
@@ -376,6 +396,7 @@ SCREENS.rmteam=function(){
   var slip=[];
   post.forEach(function(l){
     /* [stated 24 Sep · TBD-53] working days, not calendar days */
+    if(l.stage===11&&l.iss&&!l.iss.assignedAt&&workDaysInStage(l)>=1){ slip.push({l:l,k:'unas',d:workDaysInStage(l)}); return; }
     if(stalledPost(l)){ slip.push({l:l,k:'stuck',d:workDaysInStage(l)}); return; }
     var fu=nextFollowUp(l); if(actingParty(l)==='Client'&&fu&&fu<S.now) slip.push({l:l,k:'chase',d:daysBetween(fu,S.now)});
   });
@@ -395,9 +416,8 @@ SCREENS.rmteam=function(){
     '<div class="hgap">'+
     (esc_.length?hCard('esc','red','alert','Escalated tasks',hCut('resc',esc_.map(hMgrTaskRow)),chip(esc_.length,'red',true,true),''):'')+
     (slip.length?hCard('slip','amber','clock','Stalled',hCut('rslip',slip.map(function(x){
-        var meta=x.k==='stuck'
-          ? chip(plural(x.d,'working day')+' in stage','red',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+'</span>'
-          : chip('Chase '+plural(x.d,'day')+' late','amber',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 waiting on the client</span>';
+        var lab=x.k==='unas'?'Unassigned':(x.k==='chase'?'Documents pending':(x.l.stage===12?'Documents pending':(x.l.stage===13?'Awaiting copy':'Unassigned')));
+        var meta=chip(lab,x.k==='chase'?'amber':'red',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+' \u00b7 waiting on '+esc(actingParty(x.l))+' \u00b7 '+plural(x.d,x.k==='chase'?'day':'working day')+(x.k==='chase'?' past the follow-up':' at this stage')+'</span>';
         return hSlipRow(x.l,meta); })),
       chip(slip.length,'amber',true,true),''):'')+
     (risk.length?hCard('ren','violet','refresh','Renewals at risk',hCut('rrisk',risk.map(function(r){
@@ -405,7 +425,7 @@ SCREENS.rmteam=function(){
         return '<div class="hrow row" data-go="'+(r.l?'line':'policy')+'" data-id="'+(r.l?r.l.id:r.p.id)+'"><div class="bd">'+
           '<div class="tt">'+esc(shortName(r.a.n))+' <span class="pr">\u00b7 '+esc(r.p.p)+'</span></div>'+
           '<div class="mt">'+chip('Due '+fmtD(r.p.exp),late?'red':'amber',true,true)+'<span>'+esc(uname(r.a.own))+' \u00b7 '+(r.l?'still at '+esc(stageName(r.l.stage)):'not started')+'</span></div></div>'+
-          '<div class="rt">'+ic('chevright')+'</div></div>'; })),
+          '<div class="rt">'+(r.l&&canTakeOver(r.l)?'<button class="btn sm" data-flow="takeover" data-line="'+r.l.id+'">Take ownership</button>':'')+ic('chevright')+'</div></div>'; })),
       chip(risk.length,'violet',true,true),''):'')+
     '</div>'+
     '<div class="meta mt16">Closing an escalated task closes it for the RM too, and the line does not move. Taking a line over is the fallback for when the RM is away \u2014 it is audited. The full book is on <button class="link" data-go="renewals">Renewals</button> and <button class="link" data-go="tickets">Tickets</button>.</div>';
@@ -417,7 +437,7 @@ function postSeed(lines,accounts){
   var L=function(id){ return lines.filter(function(l){return l.id===id;})[0]; }, A=function(id){ return accounts.filter(function(a){return a.id===id;})[0]; };
   function paid(l,o){ l.paidAt=o.paidAt; l.soldBy=o.soldBy; l.hand={note:o.note,by:o.soldBy,at:o.paidAt,utr:o.utr||'',proof:'Payment screenshot'}; l.iss=o.iss; l.iss.mail=o.mail||[]; l.att=o.att||3;
     l.log.push({at:o.paidAt,t:'Payment confirmed',m:o.soldName+' · '+INR(l.prem)+' matched'+(o.utr?' · UTR '+o.utr:''),sys:0,kind:'pay'});
-    l.log.push({at:o.paidAt,t:'Ownership transferred to '+o.rmName,m:'System · account and product line owner both moved · handover packet attached',sys:1,kind:'sys'});
+    l.log.push({at:o.paidAt,t:'Owner changed from '+o.soldName+' to '+o.rmName+' — Transfer at payment',m:'by the system · Sold by '+o.soldName,sys:1,kind:'sys'});
     l.log.push({at:o.paidAt,t:'Post-purchase ticket '+o.iss.id+' created',m:'System · BimaOps · Customer Success',sys:1,kind:'sys'});
     if(o.iss.assignedAt){ l.log.push({at:o.iss.assignedAt,t:'Ticket assigned to '+CS_NAME,m:'System · every applicable track starts now',sys:1,kind:'sys'}); }
     (o.log||[]).forEach(function(e){ l.log.push(e); });

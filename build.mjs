@@ -3,7 +3,7 @@
  * Builds the prototype.
  *
  * The app is written as numbered modules in app/ — one stylesheet fragment and
- * twenty-two JavaScript modules, concatenated in filename order into a single
+ * twenty-five JavaScript modules, concatenated in filename order into a single
  * self-contained page. There is no bundler and there are no dependencies: the
  * order of the filenames IS the dependency order.
  *

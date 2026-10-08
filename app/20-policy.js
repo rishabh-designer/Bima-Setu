@@ -23,7 +23,7 @@ function polNo(p){ return p.pno||''; }
 function polNoCell(p){ return p.pno?'<span class="mono">'+esc(p.pno)+'</span>':'<span class="meta">awaited</span>'; }
 function polStart(p){ return p.start||(p.exp?p.exp-364*86400000:0); }
 function polType(p){ return p.ptype||'Fresh'; }
-function polActive(p){ return !(p.expired||p.exp<S.now); }
+function polActive(p){ return !(p.expired||p.exp<S.now||renCancelled(p)); }
 function polLive(p){ return {tx:polActive(p)?'Active':'Inactive', tone:polActive(p)?'green':'neutral'}; }
 function polById(pid){ for(var i=0;i<S.data.accounts.length;i++){ var a=S.data.accounts[i]; for(var j=0;j<(a.pols||[]).length;j++) if(a.pols[j].id===pid) return {a:a,p:a.pols[j]}; } return null; }
 function polPrev(p){ return p.prev?polById(p.prev):null; }
@@ -34,7 +34,7 @@ function polSvc(p){ return S.data.svc.filter(function(t){return t.pol===p.id;});
 /* the type a policy gets when it is booked, decided once */
 function polTypeFor(a,l){
   if(l&&l.renews) return 'Renewal';
-  return (a.pols||[]).filter(function(p){return !p.issuing;}).length?'Cross-sell':'Fresh';
+  return (a.pols||[]).length?'Cross-sell':'Fresh';
 }
 /* seed pass: give every policy a start date, a type, and its two numbers, oldest first */
 function polSeedFix(accounts){
@@ -82,41 +82,42 @@ SCREENS.policy=function(){
       kv('BK internal policy number',p.bkno?'<span class="mono">'+esc(p.bkno)+'</span>':'<span class="meta">not on file — migrated without one</span>')+
       kv('Product',esc(p.p))+kv('Insurer',esc(p.ins))+
       kv('Sum insured',esc(p.si||'—'))+kv('Premium','<b>'+INR(p.pr)+'</b>')+kv('Policy type',chip(ty,PTYPE[ty]||'neutral',true,true))+
-      kv('Policy start',esc(p.start?fmtD(p.start):'—'))+kv('Policy end',esc(p.exp?fmtD(p.exp):'—'))+kv('Status',chip(st.tx,st.tone,true,true)+(polActive(p)?' <span class="meta">expires in '+plural(calDays(S.now,p.exp),'day')+'</span>':''))+
+      (p.issuing?kv('Policy period','<span class="meta">to be confirmed — read from the copy</span>'):kv('Policy start',esc(p.start?fmtD(p.start):'—'))+kv('Policy end',esc(p.exp?fmtD(p.exp):'—')))+kv('Status',chip(st.tx,st.tone,true,true))+
       kv('Account','<button class="link" data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>')+
       kv('Sold by',l?esc(uname(l.soldBy||l.owner)):'<span class="meta">before the CRM</span>')+
-      kv('Endorsements',String(p.endo||0))+'</div>'+
+      kv('Endorsements',String(p.endo||0))+kv('Last endorsed',(function(){ var c=endo.filter(function(t){return t.stage==='Completed';}).sort(function(x,y){return (y.stageAt||y.raised)-(x.stageAt||x.raised);})[0]; return c?esc(fmtD(c.stageAt||c.raised)):'<span class="meta">—</span>'; })())+'</div>'+
       diamonds(true)+'<div class="h3">Where it came from, and what comes next</div><div class="rowlist mt8" style="border:1px solid var(--border);border-radius:12px">'+
-      (prev?'<div class="row" data-go="policy" data-id="'+prev.p.id+'"><div class="bd"><b>Renewed from '+esc(prev.p.id)+'</b><div class="m">'+esc(prev.p.ins)+' · '+esc(prev.p.start?fmtD(prev.p.start):'—')+' to '+esc(fmtD(prev.p.exp))+'</div></div><div class="rt">'+ic('chevright')+'</div></div>':'')+
+      (prev?'<div class="row" data-go="policy" data-id="'+prev.p.id+'"><div class="bd"><b>Renewed from '+esc(prev.p.pno||prev.p.bkno||prev.p.id)+'</b><div class="m">'+esc(prev.p.ins)+' · '+esc(prev.p.start?fmtD(prev.p.start):'—')+' to '+esc(fmtD(prev.p.exp))+'</div></div><div class="rt">'+ic('chevright')+'</div></div>':'')+
+      (!prev?'<div><div class="bd"><b>Renewed from</b><div class="m">Fresh business — not a renewal</div></div></div>':'')+
       (l?'<div class="row" data-go="line" data-id="'+l.id+'"><div class="bd"><b>Sold on product line '+esc(l.id)+'</b><div class="m">'+esc(stageName(l.stage))+' · owner '+esc(uname(l.owner))+(isRen(l)?' · a renewal line':(oppOf(l)?' · '+esc(oppName(l)):''))+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'
          :'<div><div class="bd meta">No product line on record — this policy predates the CRM.</div></div>')+
-      (nxt?'<div class="row" data-go="policy" data-id="'+nxt.p.id+'"><div class="bd"><b>Renewed into '+esc(nxt.p.id)+'</b><div class="m">'+esc(nxt.p.ins)+' · from '+esc(nxt.p.start?fmtD(nxt.p.start):'—')+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'
+      (nxt?'<div class="row" data-go="policy" data-id="'+nxt.p.id+'"><div class="bd"><b>Renewed into '+esc(nxt.p.pno||nxt.p.bkno||nxt.p.id)+'</b><div class="m">'+esc(nxt.p.ins)+' · from '+esc(nxt.p.start?fmtD(nxt.p.start):'—')+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'
          :(ren?'<div class="row" data-go="line" data-id="'+ren.id+'"><div class="bd"><b>Renewal open — '+esc(ren.id)+'</b><div class="m">'+esc(stageName(ren.stage))+' · '+esc(uname(ren.owner))+' · the renewal is a product line, not an opportunity</div></div><div class="rt">'+ic('chevright')+'</div></div>'
             /* [stated 24 Sep] a contractual policy never renews, and the record says so rather than looking unstarted */
-            :(isContractual(p.p)?'<div><div class="bd"><b>No renewal — this is a contractual policy</b><div class="m">'+esc(p.p)+' runs for the length of a contract, not a policy year. No renewal line is opened and it never appears in the renewals pipeline.</div></div></div>':'')))+'</div>';
+            :(isContractual(p.p)?'<div><div class="bd"><b>No renewal — this is a contractual policy</b><div class="m">'+esc(p.p)+' runs for the length of a contract, not a policy year. No renewal line is opened and it never appears in the renewals pipeline.</div></div></div>':'<div><div class="bd"><b>Renewal</b><div class="m">No renewal opened yet — the system opens one 90 days before the policy ends.</div></div></div>')))+'</div>';
   } else if(tab==='quotes'){
     body=l?quotesTab(l):empty('file','Nothing to show','This policy has no product line in the CRM, so there is no RFQ and no quote comparison behind it.');
   } else if(tab==='docs'){
     var docs=polDocs(p), waiting=docs.filter(function(d){return !d.have;});
     body='<div class="phhd"><div class="t">Documents</div><div class="a">'+(docs.length-waiting.length)+' of '+docs.length+' on file</div></div>'+
-      (p.issuing?'<div class="mt12">'+note('violet','Policy copy pending','The premium is paid and the cover is on. '+(l&&l.iss?'The post-purchase ticket is collecting the documents; the copy and the tax invoice come from the insurer and go to the client once they pass QC.':'The copy is awaited from the insurer.')+' The number and period on this policy are provisional until it arrives.','clock')+'</div>':'')+
+      (p.issuing?'<div class="mt12">'+note('violet','Awaiting policy copy','The premium is paid and the cover is on. '+(l&&l.iss?'The post-purchase ticket is collecting the documents; the copy and the tax invoice come from the insurer and go to the client once the RM has checked the copy.':'The copy is awaited from the insurer.')+' The insurer’s number and the period are written from the copy.','clock')+'</div>':'')+
       '<div class="rowlist doclist mt12">'+docs.map(function(d){
         return docRow(d.n,d.have,d.who,{pol:p.id,acct:a.id,line:l?l.id:'',ref:(l&&l.iss&&/mandate/i.test(d.n))?l.iss.rows.md.ref:''});
       }).join('')+'</div>'+
       (l&&l.iss?'<div class="meta mt12">'+(waiting.length?plural(waiting.length,'document')+' still outstanding. ':'')+'Collected on the post-purchase ticket <button class="link" data-go="ticket" data-id="'+l.iss.id+'">'+esc(l.iss.id)+'</button>, where each one\u2019s status and chase history sits.</div>'
         :'<div class="meta mt12">Held against the policy record. This policy has no post-purchase ticket in the CRM.</div>');
   } else {
-    body='<div class="phhd"><div class="t">Endorsements and claims</div>'+(a.own===u.id?'<button class="btn sm" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="end"'+(polActive(p)?'':' disabled title="Expired policies cannot be endorsed"')+'>'+ic('plus')+'Endorse</button>':'')+'</div>'+
+    body='<div class="phhd"><div class="t">Endorsements and claims</div><div class="a">'+(a.own===u.id?(polActive(p)&&!p.issuing?'<button class="btn sm" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="end">'+ic('plus')+'Endorse</button> ':'')+(!p.issuing?'<button class="btn sm" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="clm">'+ic('plus')+'Claim</button>':''):'')+'</div></div>'+
       '<div class="h4 mt12 mb12">Endorsements ('+endo.length+')</div>'+(endo.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+endo.map(svcRow).join('')+'</div>':'<div class="meta">None raised on this policy.</div>')+
       '<div class="h4 mt16 mb12">Claims ('+clm.length+')</div>'+(clm.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+clm.map(svcRow).join('')+'</div>':'<div class="meta">None raised on this policy.</div>');
   }
   var html='<div class="crumbs"><button data-go="accounts">Accounts</button>'+ic('chevright','ic14')+'<button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+'<b>'+esc(p.pno||p.bkno||p.id)+'</b></div>'+
-    '<div class="hdrow"><div><div class="h1">'+esc(p.p)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span class="mono">'+esc(p.pno||p.bkno||p.id)+'</span><span class="sep">·</span>'+chip(st.tx,st.tone,true,true)+chip(ty,PTYPE[ty]||'neutral',true,true)+chip(esc(p.ins),'neutral',false,true)+'</div></div><span class="sp"></span>'+
+    '<div class="hdrow"><div><div class="h1">'+esc(p.p)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>Policy no. <span class="mono">'+(p.pno?esc(p.pno):'awaited')+'</span></span><span class="sep">·</span><span>BK <span class="mono">'+esc(p.bkno||'—')+'</span></span><span class="sep">·</span>'+chip(st.tx,st.tone,true,true)+chip(ty,PTYPE[ty]||'neutral',true,true)+chip(esc(p.ins),'neutral',false,true)+'</div></div><span class="sp"></span>'+
       '<div class="acts">'+(a.own===u.id?'<button class="btn sm" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="clm">Raise a claim</button>':'')+'</div></div>'+
-    (p.issuing?'<div class="banner violet mt12">'+ic('clock','ic14')+'<span><b>Policy copy pending</b> — paid and on cover. The number and period here are provisional; they are written from the copy when it arrives. See <b>Documents</b>.</span></div>':'')+
+    (p.issuing?'<div class="banner violet mt12">'+ic('clock','ic14')+'<span><b>Awaiting policy copy</b> — paid and on cover. The insurer’s number and the period are written from the copy when it arrives. <button class="link" data-uiset="ptab_'+p.id+'" data-uv="docs">See Documents</button></span></div>':'')+
     diamonds()+
     '<div class="two"><div class="rail">'+
-      '<div class="clock '+(polActive(p)?'green':'neutral')+'"><div class="top"><span>Policy period</span><span class="own">'+esc(ty)+'</span></div><div class="hl">'+(polActive(p)?plural(calDays(S.now,p.exp),'day')+' to run':'Expired')+'</div><div class="l1">'+esc(p.start?fmtD(p.start):'—')+' <span> to '+esc(p.exp?fmtD(p.exp):'—')+'</span></div><div class="l2">'+ic('shield','ic14')+esc(p.ins)+' · '+INR(p.pr)+'</div></div>'+
+      '<div class="clock '+(polActive(p)?'green':'neutral')+'"><div class="top"><span>Policy period</span><span class="own">'+esc(ty)+'</span></div><div class="hl">'+(p.issuing?'Period to be confirmed':(polActive(p)?'Active':(renCancelled(p)?'Cancelled':'Expired')))+'</div><div class="l1">'+(p.issuing?'<span>from the policy copy</span>':esc(p.start?fmtD(p.start):'—')+' <span> to '+esc(p.exp?fmtD(p.exp):'—')+'</span>')+'</div><div class="l2">'+ic('shield','ic14')+esc(p.ins)+' · '+INR(p.pr)+'</div></div>'+
       '<div class="na neutral"><div class="k">Sum insured</div><div class="i">'+esc(p.si||'—')+'</div><div class="w">'+plural(p.endo||0,'endorsement')+' on this policy</div></div>'+
     '</div><div class="pane">'+
       '<div class="tabs">'+tabs.map(function(t){ return '<button data-uiset="ptab_'+p.id+'" data-uv="'+t[0]+'"'+(tab===t[0]?' class="on"':'')+'>'+t[1]+(t[0]==='svc'&&svc.length?' ('+svc.length+')':'')+'</button>'; }).join('')+'</div>'+

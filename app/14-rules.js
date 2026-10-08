@@ -44,13 +44,17 @@ function evalCond(c,l){
   /* [stated 24 Sep · TBD-42] a task the SYSTEM closed does not count as Done. Only a person
      finishing the work satisfies a Done condition, so a chained rule does not fire off a
      self-closing task. */
+  else if(c.type==='ident'){ var a=acctOf(l); v= !!a && (c.value==='verified'?!a.prov:!!a.prov); }
+  else if(c.type==='payreq'){ var ps=l.pay==='pre'?'none':(l.pay==='ticket'?'ops':(l.pay==='back'?'back':(l.pay==='shared'?'shared':'paid'))); v= ps===c.value; }
   else if(c.type==='task'){ var t=latestTaskTitled(l,c.task); v= !!t && taskStateOf(t)===c.value && !(c.value==='done'&&t.doneBy==='system'); }
   return c.op==='isnot' ? !v : v;
 }
 function hasConds(gs){ return !!gs && gs.some(function(g){ return g.length>0; }); }
 function evalGroups(gs,l){ return hasConds(gs) && gs.some(function(g){ return g.length>0 && g.every(function(c){ return evalCond(c,l); }); }); }
 function ruleFilters(r,l){
+  if(r.pc&&r.pc.length&&r.pc.indexOf(CATOF[l.product]||'')<0) return false;
   if(r.pf&&r.pf.length&&r.pf.indexOf(l.product)<0) return false;
+  if(r.tm){ var ow=userById(l.owner); if(!ow||(ow.mgr!==r.tm&&l.owner!==r.tm)) return false; }
   if(r.rt==='dau'&&l.rate!==1) return false; if(r.rt==='plc'&&l.rate!==0) return false;
   /* [stated 23 Sep] a renewal is a line, not an opportunity — read the line */
   if(r.ot==='ren'&&!isRen(l)) return false; if(r.ot==='new'&&isRen(l)) return false;
@@ -58,7 +62,7 @@ function ruleFilters(r,l){
   if(r.ap==='grp'&&!(GROUPS[r.gp]||[]).some(function(u){return u===l.owner;})) return false;
   return true;
 }
-function ruleLive(r){ if(!r.act) return false; var d=ymd(S.now); if(r.from&&d<r.from) return false; if(r.until&&d>r.until) return false; return true; }
+function ruleLive(r){ if(!r.act) return false; var d=ymd(S.now); if(r.from&&d<r.from) return false; if(r.until&&d>r.until) return false; if(r.seaF&&r.seaT){ var md=d.slice(5); if(r.seaF<=r.seaT?(md<r.seaF||md>r.seaT):(md<r.seaF&&md>r.seaT)) return false; } return true; }
 function ruleApplies(r,l){ return ruleLive(r) && ruleFilters(r,l); }
 
 /* ---------- per line, per rule: the turn ---------- */
@@ -92,7 +96,7 @@ function runRules(kind,lines){
         if(blockReason(r,l,rs)) return;
         if(hasConds(r.closeWhen) && evalGroups(r.closeWhen,l)) return; /* would close the moment it appears */
         var due=addWork(S.now,durMins(+r.du,r.duu)), escAt= r.cl==='sla' ? addWork(due,durMins(+r.ec,r.ecu)) : 0;
-        var t={id:'T-'+(S.data.seq.task++),line:l.id,acct:null,owner:l.owner,title:r.ti,cls:r.cl==='sla'?'SLA':'Follow-up',createdAt:S.now,dueAt:due,escAt:escAt,done:0,doneAt:0,doneBy:'',rule:r.id,seen:'pending'};
+        var t={id:'T-'+(S.data.seq.task++),line:l.id,acct:null,owner:l.owner,title:r.ti,desc:r.desc||'',cls:r.cl==='sla'?'SLA':'Follow-up',createdAt:S.now,dueAt:due,escAt:escAt,done:0,doneAt:0,doneBy:'',rule:r.id,seen:'pending'};
         S.data.tasks.push(t); rs.turnMade=true; rs.count++; r.fd=(r.fd||0)+1; made.push(t); changed=true;
         rlog('make',l,'Task created · “'+r.ti+'”',r.id+' · '+via+' · for '+uname(l.owner)+' · due '+fmt(due)+(escAt?' · escalates '+fmt(escAt):' · never escalates'));
       });
@@ -107,6 +111,7 @@ function primeRules(){ liveLines().forEach(function(l){ S.data.rules.forEach(fun
 function fireRules(l){ return runRules('event',[l]); }
 function liveLines(){ return S.data.lines.filter(function(l){ return !dead(l); }); }
 function sweepStates(){
+  parkSweep();
   S.data.tasks.forEach(function(t){ if(t.done) return; var s=taskStateOf(t); if(s!==(t.seen||'pending')){ var l=lineById(t.line);
     if(s==='over') rlog('esc',l,'Overdue · “'+t.title+'”','Shown to '+uname(t.owner)+' only');
     if(s==='esc'){ var u=userById(t.owner); rlog('esc',l,'Escalated · “'+t.title+'”','Now with '+uname(u&&u.mgr?u.mgr:'vikram')+', the owner’s manager'); }
@@ -134,26 +139,31 @@ function condPlain(c){ var op=c.op==='isnot'?' is not ':' is ';
   if(c.type==='stage') return 'stage'+op+c.value+' · '+stageName(+c.value);
   if(c.type==='status') return 'status'+op+statusLabel(c.value);
   if(c.type==='disp') return 'latest call'+op+(String(c.value).indexOf('group:')===0?dispLabel(c.value):'“'+c.value+'”');
+  if(c.type==='ident') return 'account identity'+op+(c.value==='verified'?'Verified':'Provisional');
+  if(c.type==='payreq') return 'payment request'+op+PAYREQ_LBL[c.value];
   return '“'+(c.task||'…')+'”'+op+tstateLabel(c.value); }
+var PAYREQ_LBL={none:'not raised',ops:'with Ops',back:'details returned',shared:'shared',paid:'paid'};
 function condHtml(c){ var op=c.op==='isnot'?' is not ':' is ';
   if(c.type==='stage') return 'stage'+op+'<b>'+esc(c.value+' · '+stageName(+c.value))+'</b>';
   if(c.type==='status') return 'status'+op+'<b>'+esc(statusLabel(c.value))+'</b>';
   if(c.type==='disp') return 'latest call'+op+'<b>'+esc(dispLabel(c.value))+'</b>';
+  if(c.type==='ident') return 'account identity'+op+'<b>'+(c.value==='verified'?'Verified':'Provisional')+'</b>';
+  if(c.type==='payreq') return 'payment request'+op+'<b>'+esc(PAYREQ_LBL[c.value])+'</b>';
   return '<b>“'+esc(c.task||'…')+'”</b>'+op+'<b>'+esc(tstateLabel(c.value))+'</b>'; }
 function liveGroups(gs){ return (gs||[]).filter(function(g){ return g.length; }); }
 function plainGroups(gs){ var g=liveGroups(gs); return g.map(function(x){ var s=x.map(condPlain).join(' AND '); return g.length>1?'('+s+')':s; }).join(' OR '); }
 function htmlGroups(gs){ var g=liveGroups(gs); if(!g.length) return '<span class="meta">no conditions yet</span>'; return g.map(function(x){ var s=x.map(condHtml).join(' and '); return g.length>1?'('+s+')':s; }).join(' <i>or</i> '); }
-function ruleScope(r){ var p=[]; if(r.pf&&r.pf.length) p.push(r.pf.join(', ')); if(r.rt==='dau') p.push('DAU only'); if(r.rt==='plc') p.push('placement only'); if(r.ot==='ren') p.push('renewals'); if(r.ot==='new') p.push('new business'); if(r.ap==='ppl') p.push('owned by '+(r.pp||[]).map(uname).join(', ')); if(r.ap==='grp') p.push(r.gp); return p.join(' · '); }
+function ruleScope(r){ var p=[]; if(r.pc&&r.pc.length) p.push(r.pc.join(', ')); if(r.tm) p.push(uname(r.tm)+'’s team'); if(r.pf&&r.pf.length) p.push(r.pf.join(', ')); if(r.rt==='dau') p.push('DUA only'); if(r.rt==='plc') p.push('placement only'); if(r.ot==='ren') p.push('renewals'); if(r.ot==='new') p.push('new business'); if(r.ap==='ppl') p.push('owned by '+(r.pp||[]).map(uname).join(', ')); if(r.ap==='grp') p.push(r.gp); return p.join(' · '); }
 function ruleSentence(r){
   var s='When '+htmlGroups(r.when);
-  var sc=ruleScope(r); if(sc) s+=', only for <b>'+esc(sc)+'</b>';
+  var sc=ruleScope(r); s+=sc?', only if <b>'+esc(sc)+'</b>':', <b>for all lines</b>';
   if(+r.waitN>0) s+=', wait <b>'+esc(durTx(+r.waitN,r.waitU))+'</b>, then'; else s+=',';
-  s+=' create '+(r.cl==='sla'?'an <b>SLA</b>':'a <b>Follow-up</b>')+' task <b>“'+esc(r.ti||'…')+'”</b> for the line owner, due in <b>'+esc(durTx(+r.du||0,r.duu))+'</b>';
+  s+=' create '+(r.cl==='sla'?'an <b>SLA</b>':'a <b>Follow-up</b>')+' task <b>“'+esc(r.ti||'…')+'”</b> for <b>the line owner</b>, due in <b>'+esc(durTx(+r.du||0,r.duu))+'</b>';
   s+= r.cl==='sla' ? ', escalating to their manager <b>'+esc(durTx(+r.ec||0,r.ecu))+'</b> after that.' : '. It stops at Overdue and never escalates.';
   s+=' Re-checked <b>'+(r.recheck==='off'?'never':r.recheck)+'</b>.';
   if(r.repeat) s+=' Repeats while the conditions stay true, '+(+r.max>0?'stopping after <b>'+esc(r.max)+'</b>.':'with <b>no maximum</b>.');
   s+= hasConds(r.closeWhen) ? ' Closes itself when '+htmlGroups(r.closeWhen)+'.' : ' Closed by hand.';
-  var w=(r.from?'Active from '+esc(fmtD(new Date(r.from+'T00:00:00').getTime())):'')+(r.until?' until '+esc(fmtD(new Date(r.until+'T00:00:00').getTime())):'')+(r.sea?' · season: '+esc(r.sea):'');
+  var w=(r.from?'Active from '+esc(fmtD(new Date(r.from+'T00:00:00').getTime())):'')+(r.until?' until '+esc(fmtD(new Date(r.until+'T00:00:00').getTime())):'')+(r.seaF&&r.seaT?' · each year '+esc(r.seaF.split('-').reverse().join('/'))+' to '+esc(r.seaT.split('-').reverse().join('/')):'');
   return s+(w?' <span class="meta">'+w+'</span>':'');
 }
 
@@ -175,6 +185,7 @@ function ruleErrors(b,id){
   if(b.ap==='ppl' && !(b.pp||[]).length) e.pp='Pick at least one person.';
   if(b.ap==='grp' && !b.gp) e.gp='Pick a group.';
   if(b.until && b.from && b.until<b.from) e.until='Ends before it starts.';
+  if((b.seaF&&!b.seaT)||(!b.seaF&&b.seaT)) e.sea='A season needs both a start and an end.';
   return e;
 }
 function ruleWarnings(b){
@@ -184,7 +195,7 @@ function ruleWarnings(b){
   if(+b.waitN>0 && b.waitU==='h' && b.recheck==='daily') w.push('A wait in hours on a daily check lands on the next '+p2(c.dailyH)+':00. Use Hourly to serve it within the hour.');
   if(b.repeat && !(+b.max>0)) w.push('Repeats with no maximum. It keeps creating a task each time the last one is done, for as long as the conditions hold.');
   if(b.repeat && b.recheck==='off' && !(+b.waitN>0)) w.push('Repeat with no wait and no check: the next task appears the moment the last one is ticked.');
-  if((b.rt==='dau'||b.rt==='plc') && liveGroups(b.when).some(function(g){ return g.some(function(x){ return x.type==='stage'&&x.op==='is'&&+x.value<3; }); })) w.push('DAU or placement is known only once the requirement is captured (stage 3). At stage 1 or 2 this filter never matches.');
+  if((b.rt==='dau'||b.rt==='plc') && liveGroups(b.when).some(function(g){ return g.some(function(x){ return x.type==='stage'&&x.op==='is'&&+x.value<3; }); })) w.push('DUA or placement is known only once the requirement is captured (stage 3). At stage 1 or 2 this filter never matches.');
   return w;
 }
 
@@ -194,26 +205,32 @@ function rsel(id,attrs,opts,cur,cls){ return '<select class="sel'+(cls?' '+cls:'
 function rseg(key,opts,cur){ return '<div class="seg">'+opts.map(function(o){ return '<button type="button" data-rbset="'+key+'" data-rv="'+esc(o[0])+'"'+(String(cur)===String(o[0])?' class="on"':'')+'>'+esc(o[1])+'</button>'; }).join('')+'</div>'; }
 function rfield(label,inner,hint,err){ return '<div class="field"><div class="lbl">'+esc(label)+'</div>'+inner+(err?'<div class="err">'+esc(err)+'</div>':(hint?'<div class="hint">'+esc(hint)+'</div>':''))+'</div>'; }
 function rulesTabs(cur){ var open=S.data.tasks.filter(function(t){return !t.done&&t.rule;}).length; return '<div class="tabs atabs" style="justify-content:flex-start;margin:0 0 16px">'+[['rules','Rules',S.data.rules.filter(function(r){return r.act;}).length+' active'],['rulesim','Simulator',open+' open by rule'],['rulecfg','Task settings','Mon–Fri '+p2(cfg().ws)+':00–'+p2(cfg().we)+':00']].map(function(t){ return '<button data-go="'+t[0]+'"'+(cur===t[0]?' class="on"':'')+'>'+esc(t[1])+' <span class="meta">'+esc(t[2])+'</span></button>'; }).join('')+'</div>'; }
-function rulesLock(){ return {sc:'Task rules', html:empty('lock','Managers configure the rules','You can see the rules that create your tasks on each task itself — the rule ID is on the row.','<button class="btn" data-go="tasks">My tasks</button>')}; }
+function rulesLock(){ return noAccess('screen'); }
+function fired30(r){ var since=S.now-30*86400000; var n=S.data.tasks.filter(function(t){ return t.rule===r.id&&t.createdAt>=since; }).length; return n||(r.fd&&!S.data.tasks.some(function(t){return t.rule===r.id;})?r.fd:n); }
 
 /* ---------- R1 · the list ---------- */
 SCREENS.rules=function(){
   var u=me(); if(!isMgrRole(u)) return rulesLock();
   var rs=S.data.rules; S.ui.rb=null; S.ui.rb_id=''; S.ui.rb_touch=0;
-  var rows=rs.map(function(r){
-    var w=ruleWarnings(r).length, sc=ruleScope(r);
-    return '<tr class="row'+(r.act?'':' dim')+'" data-go="rule" data-id="'+r.id+'"><td class="id">'+esc(r.id)+'<span class="nm">'+esc(r.n)+'</span><span class="meta" style="display:block;font-weight:400">fired '+(r.fd||0)+(w?' · '+plural(w,'warning'):'')+'</span></td>'+
-      '<td class="when">'+htmlGroups(r.when)+(sc?'<div class="meta">only '+esc(sc)+'</div>':'')+'<div class="cw">'+(hasConds(r.closeWhen)?'<span class="meta">closes when</span> '+htmlGroups(r.closeWhen):'<span class="meta">closed by hand</span>')+'</div></td>'+
-      '<td><span class="tt">'+esc(r.ti)+'</span><div>'+chip(r.cl==='sla'?'SLA':'Follow-up',r.cl==='sla'?'violet':'neutral',false,true)+'</div></td>'+
-      '<td class="due">'+(+r.waitN>0?'<div class="meta">after a '+esc(durTx(+r.waitN,r.waitU))+' wait</div>':'')+'due in '+esc(durTx(+r.du,r.duu))+'<div class="meta">'+(r.cl==='sla'?'escalates '+esc(durTx(+r.ec,r.ecu))+' later':'never escalates')+'</div></td>'+
-      '<td><div>'+chip(r.recheck==='off'?'No check':(r.recheck==='hourly'?'Hourly':'Daily'),r.recheck==='hourly'?'blue':(r.recheck==='daily'?'green':'neutral'),false,true)+'</div><div class="meta" style="margin-top:4px">'+(r.repeat?(+r.max>0?'repeats · max '+esc(r.max):'repeats · no maximum'):'once per turn')+'</div></td>'+
+  var sk=S.ui.rsort||'fd', dir=S.ui.rdir||'desc', appl=function(r){ return S.data.lines.filter(function(l){ return !dead(l)&&ruleFilters(r,l); }).length; };
+  var sorted=rs.slice().sort(function(a,b){ var va=sk==='fd'?(a.fd||0):(sk==='n'?a.n:(sk==='ap'?appl(a):(a.act?1:0))), vb=sk==='fd'?(b.fd||0):(sk==='n'?b.n:(sk==='ap'?appl(b):(b.act?1:0))); var c=va<vb?-1:(va>vb?1:0); return dir==='desc'?-c:c; });
+  var th=function(k,lbl){ return '<th><button class="link" data-rsort="'+k+'">'+esc(lbl)+(sk===k?(dir==='desc'?' ↓':' ↑'):'')+'</button></th>'; };
+  var rows=sorted.map(function(r){
+    var sc=ruleScope(r), openN=S.data.tasks.filter(function(t){return !t.done&&t.rule===r.id;}).length, ap=appl(r);
+    return '<tr class="row'+(r.act?'':' dim')+'" data-go="rule" data-id="'+r.id+'"><td class="id">'+esc(r.id)+'<span class="nm">'+esc(r.n)+'</span>'+(!(r.fd>0)?' '+chip('Never fired','amber',false,true):'')+(!r.act&&openN?'<span class="meta" style="display:block;font-weight:400">'+plural(openN,'task')+' still open</span>':'')+'</td>'+
+      '<td class="when">'+htmlGroups(r.when)+'<div class="cw">'+(hasConds(r.closeWhen)?'<span class="meta">closes when</span> '+htmlGroups(r.closeWhen):'<span class="meta">closed by hand</span>')+'</div></td>'+
+      '<td>'+(sc?esc(sc):'<span class="meta">all lines</span>')+'</td>'+
+      '<td>'+(r.ap==='grp'?esc(r.gp)+' <span class="meta">· '+((GROUPS[r.gp]||[]).length===1?'1 person':(GROUPS[r.gp]||[]).length+' people')+'</span>':(r.ap==='ppl'?((r.pp||[]).length===1?'1 person':(r.pp||[]).length+' people'):'Line owner'))+'<div class="meta">'+plural(ap,'live line')+' now</div></td>'+
+      '<td><span class="tt">'+esc(r.ti)+'</span><div>'+chip(r.cl==='sla'?'SLA':'Follow-up',r.cl==='sla'?'violet':'neutral',false,true)+'</div><div class="meta">due in '+esc(durTx(+r.du,r.duu))+'</div></td>'+
+      '<td class="num">'+fired30(r)+'<div class="meta">last 30 days</div></td>'+
       '<td><button class="btn xs'+(r.act?'':' outline')+'" data-ruletoggle="'+r.id+'">'+(r.act?'On':'Off')+'</button></td></tr>';
   }).join('');
   var html='<div class="hdrow"><div><div class="h1">Task rules</div><div class="sub">Every task that is not typed by hand comes from one of these. A rule fires when its conditions are true: built from stages, statuses, the latest call and task names, joined with AND inside a group and OR between groups. Nothing here moves a stage or a status.</div></div><span class="sp"></span><div class="acts"><button class="btn sm" data-go="rulesim">Try them in the simulator</button></div></div>'+diamonds()+rulesTabs('rules')+
-    '<div class="card" style="overflow:hidden"><div class="tw"><table class="t rules"><thead><tr><th>Rule</th><th>When · closes when</th><th>Task</th><th>Clocks</th><th>Runs</th><th>Active</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
+    '<div class="card" style="overflow:hidden">'+(rs.length?'<div class="tw"><table class="t rules"><thead><tr>'+th('n','Rule')+'<th>When · closes when</th><th>Only if</th>'+th('ap','Applies to')+'<th>Task</th>'+th('fd','Fired')+th('act','Active')+'</tr></thead><tbody>'+rows+'</tbody></table></div>':empty('settings','No rules yet','Every task that is not typed by hand comes from a rule. Create the first one.','<button class="btn" data-go="rule" data-id="new">'+ic('plus')+'Create a task rule</button>'))+'</div>'+
     '<div class="gap12 mt16">'+note('neutral','How a rule fires','It is tested the moment something changes on a line, and again at its hourly or daily check when the clock moves — never at the moment it is saved. It creates its task once each time its conditions turn from false to true; with Repeat on, it creates again once the last task is done and the wait has passed. A task the owner leaves open blocks the next one from the same rule. Turning a rule off keeps its history and its tasks; deleting is not offered.','info')+'</div>';
   return {sc:'Task rules', ctx:plural(rs.filter(function(r){return r.act;}).length,'active rule'), html:html, cta:'<button class="btn primary" data-go="rule" data-id="new">'+ic('plus')+'Create a task rule</button>'};
 };
+HANDLERS.push(function(t){ var x=t.closest('[data-rsort]'); if(!x) return false; var k=x.dataset.rsort; if(S.ui.rsort===k||(!S.ui.rsort&&k==='fd')) S.ui.rdir=(S.ui.rdir||'desc')==='desc'?'asc':'desc'; else { S.ui.rsort=k; S.ui.rdir='desc'; } paint(); return true; });
 HANDLERS.push(function(t){ var x=t.closest('[data-ruletoggle]'); if(!x) return false; var r=by(S.data.rules,x.dataset.ruletoggle); if(!r) return true; var ok=write(function(){ r.act=r.act?0:1; },'the rule'); if(ok){ paint(); toast(r.act?'Rule on':'Rule off',r.act?r.n+' fires from now on.':r.n+' will not create or close tasks. Existing tasks stay.'); } return true; });
 
 /* ---------- R2 · the builder ---------- */
@@ -226,12 +243,14 @@ function rbLoad(id){
 function taskNames(){ var out=[]; S.data.rules.forEach(function(r){ if(r.ti&&out.indexOf(r.ti)<0) out.push(r.ti); }); var d=S.ui.rb; if(d&&d.ti&&out.indexOf(d.ti)<0) out.push(d.ti); return out; }
 function condRow(cw,g,ci,c){
   var idp='c_'+cw+'_'+g+'_'+ci+'_', da=' data-cw="'+cw+'" data-g="'+g+'" data-c="'+ci+'"';
-  var typeSel=rsel(idp+'type','data-ck="type"'+da+' aria-label="Condition on"',[['stage','Stage'],['status','Line status'],['disp','Latest call'],['task','Task']],c.type);
+  var typeSel=rsel(idp+'type','data-ck="type"'+da+' aria-label="Condition on"',[['stage','Stage'],['status','Line status'],['disp','Latest call'],['task','Task'],['ident','Account identity'],['payreq','Payment request']],c.type);
   var opSel=rsel(idp+'op','data-ck="op"'+da+' aria-label="is or is not"',[['is','is'],['isnot','is not']],c.op,'op');
   var rest;
   if(c.type==='stage') rest=opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Stage"',STAGES.map(function(s){ return [s.n,s.n+' · '+s.s]; }),c.value);
   else if(c.type==='status') rest=opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Status"',STATUS_OPTS,c.value);
   else if(c.type==='disp') rest=opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Disposition"',[['group:nc','any No connect'],['group:c','any Connected']].concat(DISP.map(function(d){ return [d.n,d.n]; })),c.value);
+  else if(c.type==='ident') rest=opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Identity"',[['prov','Provisional'],['verified','Verified']],c.value);
+  else if(c.type==='payreq') rest=opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Payment request"',Object.keys(PAYREQ_LBL).map(function(k){return [k,PAYREQ_LBL[k]];}),c.value);
   else rest=rsel(idp+'task','data-ck="task"'+da+' aria-label="Task name"',[['','Choose a task…']].concat(taskNames().map(function(n){ return [n,n]; })),c.task)+opSel+rsel(idp+'value','data-ck="value"'+da+' aria-label="Task state"',TSTATE_OPTS,c.value);
   return '<div class="crow">'+typeSel+rest+'<button type="button" class="x" title="Remove condition" aria-label="Remove condition" data-rcond="del"'+da+'>×</button></div>';
 }
@@ -258,19 +277,23 @@ SCREENS.rule=function(){
   var id=S.route.id||'new', r=rbLoad(id); if(!r) return SCREENS.notfound();
   var b=S.ui.rb, e=ruleErrors(b,id), w=ruleWarnings(b), t=S.ui.rb_touch, isNew=id==='new', nerr=Object.keys(e).length, c=cfg();
   var html='<div class="crumbs"><button data-go="rules">Task rules</button>'+ic('chevright','ic14')+'<b>'+(isNew?'Create a task rule':esc(id))+'</b></div>'+
-    '<div class="hdrow"><div><div class="h1">'+(isNew?'Create a task rule':esc(b.n||id))+'</div><div class="sub">'+(isNew?'Say when the task should appear, then what it is. The sentence alongside is what the rule means, in plain words.':esc(id)+' · fired '+(r.fd||0)+' times · '+(r.act?'on':'off'))+'</div></div><span class="sp"></span><div class="acts">'+(isNew?'':'<button class="btn sm ghost" data-rbdup="1">Duplicate</button>')+'<button class="btn sm ghost" data-go="rules">Cancel</button><button class="btn primary sm" data-rbsave="1"'+(nerr?' disabled':'')+'>'+(isNew?'Create rule':'Save changes')+'</button></div></div>'+diamonds()+
+    '<div class="hdrow"><div><div class="h1">'+(isNew?'Create a task rule':esc(b.n||id))+'</div><div class="sub">'+(isNew?'Say when the task should appear, then what it is. The sentence alongside is what the rule means, in plain words.':esc(id)+' · fired '+(r.fd||0)+' times · '+(r.act?'on':'off'))+'</div></div><span class="sp"></span><div class="acts">'+'<button class="btn sm ghost" data-go="rules">Cancel</button><button class="btn primary sm" data-rbsave="1"'+(nerr?' disabled':'')+'>'+(isNew?'Create rule':'Save changes')+'</button></div></div>'+diamonds()+
     '<div class="two"><div class="pane"><div class="pb">'+
       '<div class="fgrid">'+rfield('Rule name','<input class="inp" id="rb_n" data-rb="n" value="'+esc(b.n)+'" placeholder="Quote sent · follow-up" autocomplete="off">','What the admin calls it. Not what the owner sees.',t?e.n:'')+'<div></div></div>'+
+      rfield('Task description — optional','<input class="inp" id="rb_desc" data-rb="desc" value="'+esc(b.desc||'')+'" placeholder="Call the client, confirm they have seen the QCR, ask which quote">','Shown to the owner under the task title.')+
       diamonds(true)+'<div class="sect">When<small>AND inside a group · OR between groups</small></div><div class="mt12">'+condBuilder('when',b.when,false)+'</div>'+((t&&e.when)?'<div class="err mt8">'+esc(e.when)+'</div>':'')+(e.cond?'<div class="err mt8">'+esc(e.cond)+'</div>':'')+
       diamonds(true)+'<div class="sect">Only for<small>optional filters</small></div>'+
+      '<div class="field mt12"><div class="lbl">Product category — none selected means all</div><div class="chips">'+['Property & casualty','Marine & liability','Employee benefits'].map(function(p){ return '<button type="button" data-rbpc="'+esc(p)+'"'+((b.pc||[]).indexOf(p)>=0?' class="on"':'')+'>'+esc(p)+'</button>'; }).join('')+'</div></div>'+
+      rfield('Owner’s team',rsel('rb_tm','data-rbsel="tm"',[['','Any team']].concat(S.data.users.filter(function(x){return x.role==='mgr'||x.role==='rmhead';}).map(function(x){ return [x.id,uname(x.id)+'’s team']; })),b.tm||''))+
       '<div class="field mt12"><div class="lbl">Products — none selected means all</div><div class="chips">'+PRODUCTS.map(function(p){ return '<button type="button" data-rbpf="'+esc(p)+'"'+(b.pf.indexOf(p)>=0?' class="on"':'')+'>'+esc(p)+'</button>'; }).join('')+'</div></div>'+
-      '<div class="fgrid mt12">'+rfield('Rateable',rsel('rb_rt','data-rbsel="rt"',[['','Either'],['dau','DAU only'],['plc','Placement only']],b.rt),'Known only once the requirement is captured — before that, a DAU-only or placement-only rule does not fire.')+rfield('Opportunity type',rsel('rb_ot','data-rbsel="ot"',[['','Either'],['new','New business'],['ren','Renewal']],b.ot))+'</div>'+
+      '<div class="fgrid mt12">'+rfield('Rateable',rsel('rb_rt','data-rbsel="rt"',[['','Either'],['dau','DUA only'],['plc','Placement only']],b.rt),'Known only once the requirement is captured — before that, a DUA-only or placement-only rule does not fire.')+rfield('Opportunity type',rsel('rb_ot','data-rbsel="ot"',[['','Either'],['new','New business'],['ren','Renewal']],b.ot))+'</div>'+
       '<div class="field mt12"><div class="lbl">Owned by</div>'+rseg('ap',[['all','Anyone'],['ppl','Named people'],['grp','A group']],b.ap)+'</div>'+
       (b.ap==='ppl'?'<div class="field"><div class="chips">'+S.data.users.filter(function(x){ return x.role==='exec'||x.role==='rm'; }).map(function(x){ return '<button type="button" data-rbpp="'+x.id+'"'+(b.pp.indexOf(x.id)>=0?' class="on"':'')+'>'+esc(x.n)+'</button>'; }).join('')+'</div>'+(e.pp?'<div class="err">'+esc(e.pp)+'</div>':'')+'</div>':'')+
       (b.ap==='grp'?rfield('Group',rsel('rb_gp','data-rbsel="gp"',[['','Choose…']].concat(Object.keys(GROUPS).map(function(g){ return [g,g+' · '+GROUPS[g].map(uname).join(', ')]; })),b.gp),'',t?e.gp:''):'')+
       diamonds(true)+'<div class="sect">Then create</div>'+
       '<div class="fgrid mt12">'+rfield('Wait before creating — optional','<div class="numunit"><input class="inp" id="rb_waitN" data-rb="waitN" type="number" min="0" value="'+esc(b.waitN)+'">'+rsel('rb_waitU','data-rbsel="waitU"',[['h','working hours'],['d','working days']],b.waitU)+'</div>','Counted from the moment the conditions turned true. For a repeat, from when the last task was done.')+
         '<div class="field"><div class="lbl">Re-check</div>'+rseg('recheck',RECHECK_OPTS,b.recheck)+'<div class="hint">Hourly runs on the hour in working hours. Daily runs at '+p2(c.dailyH)+':00. Both skip weekends and holidays.</div></div></div>'+
+      '<div class="fgrid mt12">'+rfield('Assign to','<input class="inp" value="The line owner" disabled>','Every rule task goes to whoever owns the line.')+'<div></div></div>'+
       '<div class="fgrid mt12">'+rfield('Task title','<input class="inp" id="rb_ti" data-rb="ti" value="'+esc(b.ti)+'" placeholder="Quote sent follow-up" autocomplete="off">','What the owner sees. Also the task name other rules use in their conditions.',(t||b.ti)?e.ti:'')+
         '<div class="field"><div class="lbl">Class</div>'+rseg('cl',[['sla','SLA'],['fu','Follow-up']],b.cl)+'<div class="hint">Only SLA tasks escalate. A Follow-up stops at Overdue.</div></div></div>'+
       '<div class="fgrid mt12">'+rfield('Due in','<div class="numunit"><input class="inp" id="rb_du" data-rb="du" type="number" min="1" value="'+esc(b.du)+'">'+rsel('rb_duu','data-rbsel="duu"',[['h','working hours'],['d','working days']],b.duu)+'</div>','',e.du)+
@@ -280,12 +303,11 @@ SCREENS.rule=function(){
       diamonds(true)+'<div class="sect">Close when<small>optional auto-close</small></div><div class="mt12">'+condBuilder('closeWhen',b.closeWhen,true)+'</div>'+
       diamonds(true)+'<div class="sect">When it is active</div>'+
       '<div class="fgrid mt12">'+rfield('From','<input class="inp" id="rb_from" data-rb="from" type="date" value="'+esc(b.from)+'">')+rfield('Until — optional','<input class="inp" id="rb_until" data-rb="until" type="date" value="'+esc(b.until)+'">','Leave blank for no end.',e.until)+'</div>'+
-      rfield('Season tag — optional','<input class="inp" id="rb_sea" data-rb="sea" value="'+esc(b.sea)+'" placeholder="renewal, year-end">','Only a label for filtering. It does not change when the rule fires.')+
+      '<div class="fgrid mt12">'+rfield('Season from — optional','<input class="inp" id="rb_seaF" data-rb="seaF" value="'+esc(b.seaF||'')+'" placeholder="MM-DD, e.g. 01-01">','The rule is live only inside this date range, every year.',t?e.sea:'')+rfield('Season to','<input class="inp" id="rb_seaT" data-rb="seaT" value="'+esc(b.seaT||'')+'" placeholder="MM-DD, e.g. 03-31">')+'</div>'+
     '</div></div><div class="rail">'+
       '<div class="sentence">'+ruleSentence(b)+'</div>'+
       card('Worked example',workedExample(b))+
       (nerr?note('red','Before it can be saved','<ul class="ul">'+Object.keys(e).map(function(k){ return '<li>'+esc(e[k])+'</li>'; }).join('')+'</ul>'):note('green','','<b>Complete.</b> '+(isNew?'Creating it does not fire it. It is first tested at the next change on a line'+(b.recheck==='off'?'':' or its next '+b.recheck+' check')+'.':'Saving does not fire it. Future firings use the new settings; tasks already created keep their clocks.')))+
-      (w.length?note('amber','Worth a second look','<ul class="ul">'+w.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>'):'')+
     '</div></div>';
   return {sc:isNew?'Create task rule':'Task rule', ctx:isNew?'New rule':r.id, html:html, cta:''};
 };
@@ -296,7 +318,7 @@ document.addEventListener('change',function(ev){
   if(t.dataset.rbsel!==undefined && d){ d[t.dataset.rbsel]=t.value; paint(); }
   else if(t.dataset.ck!==undefined && d){
     var c=d[t.dataset.cw][+t.dataset.g][+t.dataset.c], k=t.dataset.ck;
-    if(k==='type'){ c.type=t.value; c.op='is'; c.task=''; c.value= t.value==='stage'?'1':(t.value==='status'?'open':(t.value==='disp'?'group:nc':'done')); }
+    if(k==='type'){ c.type=t.value; c.op='is'; c.task=''; c.value= t.value==='stage'?'1':(t.value==='status'?'open':(t.value==='disp'?'group:nc':(t.value==='ident'?'prov':(t.value==='payreq'?'none':'done')))); }
     else c[k]=t.value;
     paint();
   }
@@ -317,6 +339,7 @@ HANDLERS.push(function(t){
     paint(); return true; }
   if(!d) return false;
   if(x=t.closest('[data-rbset]')){ var k=x.dataset.rbset; d[k]= k==='repeat' ? x.dataset.rv==='1' : x.dataset.rv; paint(); return true; }
+  if(x=t.closest('[data-rbpc]')){ if(!d.pc) d.pc=[]; var ip=d.pc.indexOf(x.dataset.rbpc); if(ip>=0) d.pc.splice(ip,1); else d.pc.push(x.dataset.rbpc); paint(); return true; }
   if(x=t.closest('[data-rbpf]')){ var i=d.pf.indexOf(x.dataset.rbpf); if(i>=0) d.pf.splice(i,1); else d.pf.push(x.dataset.rbpf); paint(); return true; }
   if(x=t.closest('[data-rbpp]')){ var j=d.pp.indexOf(x.dataset.rbpp); if(j>=0) d.pp.splice(j,1); else d.pp.push(x.dataset.rbpp); paint(); return true; }
   if(x=t.closest('[data-rbdup]')){ var cpy=JSON.parse(JSON.stringify(d)); cpy.id='new'; cpy.n=(cpy.n||'Rule')+' copy'; cpy.ti=(cpy.ti||'Task')+' copy'; cpy.fd=0; S.ui.rb_id='new'; S.ui.rb=cpy; S.ui.rb_touch=0; go('rule',{id:'new'}); toast('Duplicated','Rename the task title, then create it.'); return true; }
@@ -375,7 +398,7 @@ SCREENS.rulesim=function(){
   var lineOpts=S.data.lines.slice().sort(function(x,y){ return (dead(x)?1:0)-(dead(y)?1:0) || x.id.localeCompare(y.id); }).map(function(x){ var ax=acctOf(x); return [x.id, x.id+' · '+shortName(ax?ax.n:'')+' · '+x.product+' · '+x.stage+' · '+stageName(x.stage)+(dead(x)?' · '+statusTx(x):'')]; });
   var mgr=userById(l.owner), disp=S.ui.simDisp||'';
   var html='<div class="hdrow"><div><div class="h1">Simulator</div><div class="sub">The prototype’s own lines and clock — nothing here is a stand-in. Pick a line, move the clock, act as its owner, and watch the rules create, escalate and close tasks. What you do here is real in this prototype: the tasks land on the owner’s list.</div></div><span class="sp"></span><div class="acts"><button class="btn sm" data-go="line" data-id="'+l.id+'">Open the line</button><button class="btn sm ghost" data-go="rules">Back to the rules</button></div></div>'+diamonds()+rulesTabs('rulesim')+
-    '<div class="linehd"><div style="flex:1 1 320px;min-width:0"><div class="lbl">Product line</div>'+rsel('sim_line','data-simline="1"',lineOpts,l.id)+'<div class="meta mt8">'+esc(a?a.n:'')+' · owner <b>'+esc(uname(l.owner))+'</b> · manager '+esc(uname(mgr&&mgr.mgr?mgr.mgr:'vikram'))+' · '+esc(o?o.type:'Renewal')+' · '+(l.rate===1?'DAU':(l.rate===0?'Placement':'route not known yet'))+' · latest call: '+esc(lastDisp(l)||'none yet')+'</div></div>'+
+    '<div class="linehd"><div style="flex:1 1 320px;min-width:0"><div class="lbl">Product line</div>'+rsel('sim_line','data-simline="1"',lineOpts,l.id)+'<div class="meta mt8">'+esc(a?a.n:'')+' · owner <b>'+esc(uname(l.owner))+'</b> · manager '+esc(uname(mgr&&mgr.mgr?mgr.mgr:'vikram'))+' · '+esc(o?o.type:'Renewal')+' · '+(l.rate===1?'DUA':(l.rate===0?'Placement':'route not known yet'))+' · latest call: '+esc(lastDisp(l)||'none yet')+'</div></div>'+
       '<div class="rclock"><span class="meta">Prototype clock'+(inHours?'':' · outside working hours')+'</span><b>'+esc(fmt(now))+'</b><span class="meta">'+esc(fmtD(now))+'</span></div></div>'+
     timeblock('Every scheduled check between now and the target runs. Hourly on the hour '+p2(c.ws)+':00–'+p2(c.we-1)+':00, daily at '+p2(c.dailyH)+':00, working days only.',
       '<button class="timebtn" data-time="30">+30 min</button><button class="timebtn" data-time="next:hourly">Next hourly check · '+esc(fmt(nextCheck(now,'hourly')))+'</button><button class="timebtn" data-time="next:daily">Next daily check · '+esc(fmt(nextCheck(now,'daily')))+'</button><button class="timebtn" data-time="540">+1 working day</button><button class="timebtn" data-time="2700">+1 working week</button><button class="timebtn" data-time="0">Back to the seed clock</button>')+
@@ -386,7 +409,7 @@ SCREENS.rulesim=function(){
         '<div class="lbl" style="margin-bottom:6px">Move the stage</div><div class="stagebar rs">'+STAGES.map(function(s){ var n=s.n; return '<button class="'+(n<l.stage?'done':(n===l.stage?'now':''))+'" data-simstage="'+n+'" title="'+esc(s.s)+'">'+n+'</button>'; }).join('')+'</div><div class="meta" style="margin:-6px 0 10px">Now at '+l.stage+' · '+esc(stageName(l.stage))+'</div>'+
         '<div class="lbl" style="margin-bottom:6px">Log a call</div>'+rsel('sim_disp','data-simdisp="1"',[['','Pick the outcome…']].concat(DISP.map(function(d){ return [d.n,(d.g==='A'?'No connect':'Connected')+' · '+d.n]; })),disp)+'<div class="mt8"><button class="btn sm primary" data-simcall="1"'+(disp?'':' disabled')+'>Log disposition</button></div>'+
         '<div class="lbl" style="margin:12px 0 6px">Status</div>'+rsel('sim_status','data-simstatus="1"',STATUS_OPTS.filter(function(s){return s[0]!=='withdrawn'&&s[0]!=='unreach';}),l.status)+'<div class="meta mt8">Parking keeps the stage. Closing preserves how far it got.</div>')+'</div>'+
-      card('What kind of line','<div class="kvgrid" style="grid-template-columns:1fr">'+kv('Product',esc(l.product))+kv('Route',l.rate===1?'DAU (rateable)':(l.rate===0?'Placement':'<span class="meta">not known until the requirement is captured</span>'))+kv('Business type',esc(o?o.type:'Renewal'))+kv('Owner',esc(uname(l.owner))+' · '+esc((userById(l.owner)||{}).role==='rm'?'RM':'Sales'))+'</div>',null,{sub:'for the filters'})+
+      card('What kind of line','<div class="kvgrid" style="grid-template-columns:1fr">'+kv('Product',esc(l.product))+kv('Route',l.rate===1?'DUA (rateable)':(l.rate===0?'Placement':'<span class="meta">not known until the requirement is captured</span>'))+kv('Business type',esc(o?o.type:'Renewal'))+kv('Owner',esc(uname(l.owner))+' · '+esc((userById(l.owner)||{}).role==='rm'?'RM':'Sales'))+'</div>',null,{sub:'for the filters'})+
      '</div>'+
      '<div class="gap12"><div class="card" style="overflow:hidden"><div class="cardh"><span class="t">Tasks on this line</span><span class="s">'+plural(open.length,'open task')+'</span></div>'+(open.length?open.map(function(t){return simTaskRow(t,l);}).join(''):'<div class="empty" style="padding:28px 16px">'+'<div class="b">No open tasks. Move the stage, log a call, or run a check.</div></div>')+'</div>'+
        (dn.length?'<div class="card" style="overflow:hidden"><div class="cardh"><span class="t">Done</span><span class="s">latest '+dn.length+'</span></div>'+dn.map(function(t){return simTaskRow(t,l);}).join('')+'</div>':'')+'</div>'+
@@ -400,7 +423,7 @@ HANDLERS.push(function(t){
   if(x=t.closest('[data-simall]')){ S.ui.simAll=x.dataset.simall==='1'; paint(); return true; }
   if(x=t.closest('[data-simstage]')){ l=simLine(); var n=+x.dataset.simstage; if(!l||n===l.stage||dead(l)) return true; var made=[]; var ok=write(function(){ var back=n<l.stage; if(n>=3&&l.rate==null) l.rate=RATEABLE[l.product]?1:0; made=moveStage(l,n,'Simulator · as '+uname(l.owner)+(back?' · moved back':'')); },'the stage'); if(ok){ paint(); toast('Stage moved to '+n+' · '+stageName(n),plural(made.length,'task')+' created by rule'); } return true; }
   if(x=t.closest('[data-simcall]')){ if(x.disabled) return true; l=simLine(); var d=DISP.filter(function(q){return q.n===S.ui.simDisp;})[0]; if(!l||!d||dead(l)) return true; var made2=[];
-    var ok2=write(function(){ l.att=(l.att||0)+1; l.lastDisp=d.n; logAdd(l,'Call · '+d.n,uname(l.owner)+' · call '+l.att+(d.g==='A'?' · no connect':' · connected')+' · simulator','call'); made2=fireRules(l); if(l.stage===1){ made2=made2.concat(moveStage(l,2,'First contact logged')); } },'the call');
+    var ok2=write(function(){ var n=bumpCall(l,d.g!=='A'); l.lastDisp=d.n; logAdd(l,'Call · '+d.n,uname(l.owner)+' · call '+n+(d.g==='A'?' · no connect':' · connected')+' · simulator','call'); made2=fireRules(l); if(l.stage===1){ made2=made2.concat(moveStage(l,2,'First contact logged')); } },'the call');
     if(ok2){ S.ui.simDisp=''; paint(); toast('Disposition logged — '+d.n,plural(made2.length,'task')+' created by rule'); } return true; }
   return false;
 });
@@ -420,7 +443,8 @@ SCREENS.rulecfg=function(){
     card('Scheduled checks','<div class="fgrid">'+rfield('Hourly check','<div class="inp" style="background:var(--greySoft)">On the hour, '+p2(c.ws)+':00 to '+p2(c.we-1)+':00</div>','Working days only. For rules with waits or clocks in hours.')+rfield('Daily check',rsel('cfg_daily','data-cfg="dailyH"',hrs,c.dailyH),'Working days only. For rules with waits in days, and repeating follow-ups.')+'</div>',null,{sub:'each rule picks one in its Re-check field'})+
     card('Holidays','<div class="chips">'+c.hol.slice().sort().map(function(h){ return '<button type="button" class="on" data-holdel="'+esc(h)+'" title="Remove">'+esc(fmtD(new Date(h+'T00:00:00').getTime()))+' ×</button>'; }).join('')+'</div>'+
       '<div class="numunit mt12" style="align-items:center;flex-wrap:wrap"><input class="inp" id="cfg_hol" type="date" style="max-width:180px;flex:0 0 180px" value="'+esc(S.ui.holDraft||'')+'" data-holdraft="1"><button class="btn sm" data-holadd="1"'+(S.ui.holDraft?'':' disabled')+'>Add holiday</button></div>'+
-      '<div class="meta mt12">A holiday added late does not un-breach tasks that already escalated. Keep the calendar populated in advance.</div>',null,{sub:'excluded from every clock and check'})+
+      (function(){ var last=c.hol.slice().sort().slice(-1)[0], lt=last?new Date(last+'T00:00:00').getTime():0, short=!lt||lt-S.now<120*86400000; return '<div class="mt12">'+note(short?'amber':'neutral','Holidays entered up to '+(lt?MONN[new Date(lt).getMonth()]+' '+new Date(lt).getFullYear():'—'),short?'The list runs out soon. Add next year’s dates before then, or every clock after it will count those days as working days.':'Keep the calendar populated in advance.',short?'alert':'info')+'</div>'; })()+
+      '<div class="meta mt12">A holiday added late does not un-breach tasks that already escalated.</div>',null,{sub:'excluded from every clock and check'})+
     note('neutral','Carried from the task spec','A task created outside working hours starts its clock at the next opening. Escalation goes to the owner’s manager, once. On reassignment, open tasks move with the line and their clocks continue.','info')+'</div>';
   return {sc:'Task settings', ctx:'Mon–Fri · '+p2(c.ws)+':00–'+p2(c.we)+':00', html:html, cta:''};
 };

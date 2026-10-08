@@ -95,7 +95,7 @@ function ctcStrip(c){
   var m=CTC_END[c.k]||CTC_END.done;
   return '<div class="ctcbar '+(c.con?'green':'amber')+'">'+ic(c.con?'phone':'phoneoff','ic16')+
     '<div><b>Click to call · '+esc(m.lab)+'</b>'+
-    '<span>'+esc(c.who)+' · '+esc(c.num)+' · '+(c.con?esc(durTx(c.dur)):'rang '+esc(durTx(c.rang)))+' · recorded</span></div></div>';
+    '<span>'+esc(c.who)+' · '+esc(c.num)+' · '+(c.con?esc(durTx(c.dur)):'rang '+esc(durTx(c.rang)))+'</span></div></div>';
 }
 /* what the call adds to the activity line, whichever outcome is picked */
 function ctcMeta(c){

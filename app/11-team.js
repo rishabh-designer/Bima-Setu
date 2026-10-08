@@ -30,8 +30,8 @@ SCREENS.team=function(){
     (esc_.length?hCard('esc','red','alert','Escalated tasks',hCut('mesc',esc_.map(hMgrTaskRow)),chip(esc_.length,'red',true,true),''):'')+
     (slipRows.length?hCard('slip','amber','clock','Stalled',hCut('mslip',slipRows.map(function(x){
         var meta=x.k==='new'
-          ? chip('Not called in '+plural(x.d,'working day'),'red',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 assigned '+esc(hWhen(x.l.assignedAt))+'</span>'
-          : chip('Quiet '+plural(x.d,'day'),'amber',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+' \u00b7 waiting on '+esc(actingParty(x.l))+'</span>';
+          ? chip('Uncalled','red',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+' \u00b7 waiting on '+esc(actingParty(x.l))+' \u00b7 '+plural(x.d,'working day')+' since assigned</span>'
+          : chip('Quiet 30 days','amber',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+' \u00b7 waiting on '+esc(actingParty(x.l))+' \u00b7 last activity '+esc(fmtD(lastActivity(x.l)))+'</span>';
         return hSlipRow(x.l,meta); })),
       chip(slipRows.length,'amber',true,true),''):'')+
     '</div>'+

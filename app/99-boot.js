@@ -2,7 +2,7 @@
  *  Boot
  * ==================================================================== */
 (function(){
-  var fresh=!load(); if(fresh){ S.data=seed(); }
+  var fresh=!load(); if(fresh){ S.data=seedFill(seed()); }
   applyCfg();
   if(fresh){ renSweep(false); primeRules(); }
   S.data.tasks.forEach(function(t){ if(!t.done && t.seen===undefined) t.seen=taskStateOf(t); });

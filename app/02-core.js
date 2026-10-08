@@ -32,6 +32,8 @@ var ICONS={
  inbox:'<path d="M3 13l2.5-8h13L21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 13h5l2 3h4l2-3h5"/>',
  circlecheck:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
  search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+ more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+ globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
  panel:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
  logout:'<path d="M10 17l5-5-5-5M15 12H3"/><path d="M13 3h6v18h-6"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
@@ -82,7 +84,8 @@ function agoTx(t){ var d=daysAgo(t); if(d<=0){ var h=Math.floor((S.now-t)/360000
 
 /* working calendar: Mon–Fri 10:00–19:00, company holidays out */
 var WH={start:10,end:19};
-var HOL=['2026-10-02','2026-10-20','2026-10-21','2026-11-09','2026-12-25'];
+/* [stated 26 Sep · 19.1] the supplied 2026 company holiday list */
+var HOL=['2026-01-01','2026-01-14','2026-01-26','2026-03-04','2026-03-31','2026-05-28','2026-09-14','2026-10-02','2026-10-20','2026-11-09','2026-12-25'];
 function ymd(d){ d=new Date(d); var m=d.getMonth()+1,q=d.getDate(); return d.getFullYear()+'-'+(m<10?'0':'')+m+'-'+(q<10?'0':'')+q; }
 function dtLocal(t){ var d=new Date(t), p=function(n){return (n<10?'0':'')+n;}; return ymd(d)+'T'+p(d.getHours())+':'+p(d.getMinutes()); }   /* for <input type="datetime-local"> */
 function isWorkDay(d){ d=new Date(d); var g=d.getDay(); if(g===0||g===6) return false; return HOL.indexOf(ymd(d))<0; }
@@ -114,11 +117,11 @@ function durMins(n,u){ return u==='h' ? n*60 : n*(WH.end-WH.start)*60; }
 function durTx(n,u){ return n+' working '+(u==='h'?(n==1?'hour':'hours'):(n==1?'day':'days')); }
 
 /* ---------- state ---------- */
-var KEY='bksales.v12';
+var KEY='bksales.v16';
 var S={user:null, now:T0.getTime(), route:{v:'signin'}, hist:[], data:null, flow:null, sel:{}, ui:{}, offline:false, pending:null, side:false};
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({user:S.user, now:S.now, data:S.data, route:S.route})); }catch(e){} }
 function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return false; var o=JSON.parse(raw); if(!o||!o.data||!o.data.lines) return false; S.user=o.user; S.now=o.now||T0.getTime(); S.data=o.data; S.route=o.route&&o.route.v!=='signin'?o.route:{v:'home'}; return true; }catch(e){ return false; } }
-function reset(){ try{ localStorage.removeItem(KEY); }catch(e){} S.data=seed(); S.now=T0.getTime(); applyCfg(); renSweep(false); primeRules(); S.hist=[]; S.route={v:'home'}; S.flow=null; S.sel={}; S.ui={}; S.offline=false; save(); paint(); toast('Reset to seed','Every record, task and the clock are back where they started.'); }
+function reset(){ try{ localStorage.removeItem(KEY); }catch(e){} S.data=seedFill(seed()); S.now=T0.getTime(); applyCfg(); renSweep(false); primeRules(); S.hist=[]; S.route={v:'home'}; S.flow=null; S.sel={}; S.ui={}; S.offline=false; save(); paint(); toast('Reset to seed','Every record, task and the clock are back where they started.'); }
 function me(){ return S.user ? by(S.data.users,S.user) : null; }
 function isRole(r){ var u=me(); return !!u && u.role===r; }
 

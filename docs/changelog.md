@@ -1,5 +1,8 @@
 # BimaSetu CRM — working prototype (v47)
 
+> **The repository is now at v64.** What changed from v48 to v64 is in
+> [`changelog-v48-v64.md`](changelog-v48-v64.md). This file is the record up to v47.
+
 **Artifact:** https://claude.ai/artifact/V4ADJNCJwuYxDHs5pUcAAz
 **Design language:** BimaOps / BimaPlacement kit (tokens, Outfit, 248 px sidebar, white panel on grey shell, diamonds divider, one primary CTA per screen — and it is the screen's own, not a global button; amber-dashed = simulated inbound event, dotted-grey = prototype time control).
 **Storage:** every change is remembered in the browser (`localStorage`, key `bksales.v12` — older state is discarded on first load). *Reset* in the sidebar returns to the seed. The clock is fixed at **Mon 21 Sep 2026, 11:00** and only moves through *Prototype controls* or the simulator; when it moves, every scheduled rule check between then and the target runs.

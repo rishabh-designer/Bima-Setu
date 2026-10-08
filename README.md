@@ -41,7 +41,7 @@ not a failure; look for lines beginning `FAIL`.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, twenty-two JS modules
+app/            the source — one stylesheet fragment, twenty-five JS modules
 build.mjs       concatenates app/ into public/index.html
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          smoke.js (assertions) and shots.js (screenshots)
@@ -49,8 +49,8 @@ docs/           the changelog, and what every version changed and why
 vercel.json     the deploy configuration
 ```
 
-Modules are concatenated **in filename order**, so the number prefix is the
-dependency order. Everything shares one scope — there are no imports.
+Modules are concatenated **in filename order**, so the filename — number prefix
+first — is the dependency order. Everything shares one scope — there are no imports.
 
 | Module | What lives in it |
 |---|---|
@@ -61,7 +61,10 @@ dependency order. Everything shares one scope — there are no imports.
 | `05-shell.js` | The sidebar, the view switch, the top bar |
 | `06-home.js` | The home screens and the task rows |
 | `07-line.js` | The product line workspace, and most of the selling flows |
-| `08`–`13` | Opportunity, account, create-opportunity, team, service, tickets |
+| `07-verify.js` | Verifying a provisional account — PAN/GST (or Aadhaar) upload and OCR |
+| `08`–`10` | Opportunity, account, create-opportunity |
+| `10-web-inbound.js` | Inbound website and embedded enquiries, and how they attach to an account |
+| `11`–`13` | Team, service, tickets |
 | `14-rules.js` | The task-rule engine, the builder and the simulator |
 | `15-post.js` | The post-purchase ticket, the RM's work, the manager views |
 | `16-rfq.js` | The RFQ, and the client's own link |
@@ -71,6 +74,7 @@ dependency order. Everything shares one scope — there are no imports.
 | `20-policy.js` | Policy 360 and the policy record |
 | `21-ctc.js` | Click to call |
 | `22-docs.js` | The document viewer — view and download, every document type |
+| `23-helpers.js` | Shared helpers — panel states, activity kinds, renewal and lead priority |
 | `99-boot.js` | Boot |
 
 ### Conventions
@@ -86,7 +90,7 @@ dependency order. Everything shares one scope — there are no imports.
 ### State
 
 Everything is remembered in the browser under `localStorage`, key
-`bksales.v12`. **Reset** in the sidebar returns to the seed. The clock is fixed
+`bksales.v16`. **Reset** in the sidebar returns to the seed. The clock is fixed
 at Mon 21 Sep 2026, 11:00 and only moves through *Prototype controls* or the
 rule simulator; when it moves, every scheduled rule check between then and the
 target runs.

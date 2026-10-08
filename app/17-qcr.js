@@ -1,6 +1,6 @@
 /* ==================================================================== *
  *  The QCR — a report comparing the quotes, not a list of them.
- *  Placement builds it on a non-DAU line; on a DAU line it is assembled from
+ *  Placement builds it on a non-DUA line; on a DUA line it is assembled from
  *  the rater quotes the owner picked. The owner reviews it here and either
  *  sends it to the contact (7 → 8) or sends it back for revision (→ 6).
  *  The per-insurer terms below are prototype stand-ins.
@@ -16,8 +16,8 @@ var QCR_CSR={'New India Assurance':'95.6%','Oriental Insurance':'93.1%','United 
 
 function qcrSource(l){ return l.rate===1?'dau':'plc'; }
 function qcrQuotes(l,dauRejected){
-  if(dauRejected&&l.dauQcr) return QUOTES.dau.filter(function(q){ return l.dauQcr.q.indexOf(q.i)>=0; });
-  if(l.rate===1){ var sel=l.qsel&&l.qsel.length?l.qsel:null; return QUOTES.dau.filter(function(q){ return q.st==='quoted'&&(!sel||sel.indexOf(q.i)>=0); }); }
+  if(dauRejected&&l.dauQcr) return dauQuotes(l).filter(function(q){ return l.dauQcr.q.indexOf(q.i)>=0; });
+  if(l.rate===1){ var sel=l.qsel&&l.qsel.length?l.qsel:null; return dauQuotes(l).filter(function(q){ return q.st==='quoted'&&(!sel||sel.indexOf(q.i)>=0); }); }
   return QUOTES.plc.filter(function(q){ return q.st==='quoted'; });
 }
 function qcrOthers(l,dauRejected){ if(dauRejected||l.rate===1) return []; return QUOTES.plc.filter(function(q){ return q.st!=='quoted'; }); }
