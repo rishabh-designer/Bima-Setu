@@ -8,7 +8,7 @@ function stageTrack(l){
      known the steps it skips are removed, not struck through. From Payment Completed: the selling
      phase collapses to one "Sold" block and the RM's post-purchase steps take the bar. */
   var w=actingParty(l), paid=l.stage>=SALES_STAGES;
-  var cap= l.stage===14?'Issued — Policy Copy Sent to Client':(dead(l)?statusTx(l)+' at '+stageName(l.stage):stageName(l.stage)+' · waiting on '+w);
+  var cap= l.stage===15?'Issued — Policy Copy Sent to Client':(dead(l)?statusTx(l)+' at '+stageName(l.stage):stageName(l.stage)+' · waiting on '+w);
   var side= (l.renews&&!paid?'Renewal · ':'')+(paid ? 'Owned by the RM since payment · moved by the post-purchase ticket'+(l.iss?' '+l.iss.id:'')
     : (l.renews ? 'RFQ, then placement — a renewal never goes to the rater'
     : (l.rate===1?'DUA — priced by the rater, no RFQ':(l.rate===0?(l.rfq&&l.rfq.direct?'Non-DUA — floated straight to placement':'Non-DUA — RFQ, then placement'):'DUA or non-DUA is decided when the requirement is captured'))));
@@ -24,12 +24,12 @@ function stageTrack(l){
   return head+'<div class="track"><div class="phase soldc"><div class="ph-h">Selling <b>'+esc(seller)+'</b></div>'+
       '<div class="soldblk" title="Selling done"><div class="b"></div><div class="t">'+ic('check','ic14')+'Sold · Payment Completed</div>'+(l.paidAt?'<div class="d">Paid '+esc(fmtD(l.paidAt))+'</div>':'')+'</div></div>'+
     '<div class="hand"><span>→ RM</span><i></i></div>'+
-    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&(s.n===12||s.n===13)); }).map(step).join('')+'</div></div></div></div>';
+    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&(s.n===13||s.n===14)); }).map(step).join('')+'</div></div></div></div>';
 }
 function clockCard(l){
   var w=actingParty(l), d=daysInStage(l), tone= dead(l)?'neutral':(w==='Us'?(d>=QUIET_DAYS?'red':'blue'):(daysQuiet(l)>=QUIET_DAYS?'red':'blue'));
-  if(l.stage===14) tone='green';
-  var head= l.stage===14?'Issued':(dead(l)?statusTx(l):(l.status==='park'?'Parked':plural(d,'day')+' in stage'));
+  if(l.stage===15) tone='green';
+  var head= l.stage===15?'Issued':(dead(l)?statusTx(l):(l.status==='park'?'Parked':plural(d,'day')+' in stage'));
   var pct=Math.min(100,Math.round(d/QUIET_DAYS*100));
   return '<div class="clock '+tone+'"><div class="top"><span>Stage clock</span><span class="own">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span></div>'+
     '<div class="hl">'+esc(head)+'</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
@@ -56,11 +56,11 @@ function simsFor(l){
   if(l.stage===3&&l.rate===1) b.push(simbtn('The rater comes back empty — no insurer quotes','data-sim="raterNone" data-line="'+l.id+'"'));
   if(l.stage===6 && !l.plcQ && !l.qAns && l.round===1) b.push(simbtn('Placement raises a query','data-sim="plcQuery" data-line="'+l.id+'"'));
   if(l.stage===6 && (l.qAns||l.round>1||!l.plcQ)){ b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"')); b.push(simbtn('Placement returns: every insurer declined','data-sim="extNone" data-line="'+l.id+'"')); }
-  if(l.stage===9 && l.pay==='ticket') b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"'));
-  if(l.stage===10&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on Chola’s link · policy issued in real time','data-sim="cholaPaid" data-line="'+l.id+'"')); b.push(simbtn('24 hours pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
-  else if(l.stage===10) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
+  if(l.stage===10 && l.pay==='ticket') b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"'));
+  if(l.stage===11&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on Chola’s link · policy issued in real time','data-sim="cholaPaid" data-line="'+l.id+'"')); b.push(simbtn('24 hours pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
+  else if(l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   if(l.stage>=SALES_STAGES) b=b.concat(postSims(l));
-  if((me().role==='exec'||me().role==='rm')&&l.stage<14) b.push(simbtn('Your manager takes this line over','data-sim="extTake" data-line="'+l.id+'"'));
+  if((me().role==='exec'||me().role==='rm')&&l.stage<15) b.push(simbtn('Your manager takes this line over','data-sim="extTake" data-line="'+l.id+'"'));
   if(!b.length) return '';
   return simblock('Simulate an inbound event','Things that happen outside the CRM — a client, placement or Ops acting — faked so the flow can continue.',b.join(''));
 }
@@ -72,11 +72,11 @@ function addLineBtn(o,from,cls){ var why=addLineWhy(o); if(why&&/owns a product 
   return why?'<button class="btn '+(cls||'sm')+'" disabled title="'+esc(why)+'">'+ic('plus')+'Add product line</button>'
     :'<button class="btn '+(cls||'sm')+'" data-flow="addLine" data-acct="'+o.acct+'" data-opp="'+o.id+'"'+(from?' data-from="'+from+'"':'')+'>'+ic('plus')+'Add product line</button>'; }
 function zc(title,body,extra){ return '<div class="zc"><div class="zh"><span>'+esc(title)+'</span>'+(extra||'')+'</div>'+body+'</div>'; }
-function statusPill(l){ if(l.status==='open') return chip('Open','green',true,true);
+function statusPill(l){ if(l.status==='open') return chip(l.stage>=SALES_STAGES?'Won':'Open','green',true,true);
   var tx=l.status==='park'?'Time Pending · revisit '+fmtD(l.revisit)+(l.reason?' · '+l.reason:''):closedTx(l);
   return '<span title="'+esc(tx)+'">'+chip(l.status==='park'?'Time Pending':statusTx(l),statusTone(l),true,true)+'</span>'; }
 function lwLeft(l,a,o){
-  var c=l.contact||{}, u=me(), sole=a.sole||(!!a.aad&&!a.gst), sib=o?linesOfOpp(o.id).filter(function(x){return x.id!==l.id;}):renLinesOfAcct(l.acct).filter(function(x){return x.id!==l.id;});
+  var c=l.contact||{}, u=me(), sole=a.sole||(!!a.aad&&!a.gst), sib=o?linesOfAcct(l.acct).filter(function(x){return x.id!==l.id&&!isRen(x);}):renLinesOfAcct(l.acct).filter(function(x){return x.id!==l.id;});
   var acc=zc('Account & contact','<button class="link zname" data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button><div class="zchips">'+(a.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true))+(sole?chip('Sole proprietor','neutral',false,true):'')+'</div>'+
     '<div class="zkv"><span>Contact on this line</span><b>'+esc(c.n||'—')+'</b>'+(c.m||c.e?'<div class="meta">'+esc([c.m,c.e].filter(Boolean).join(' · '))+'</div>':'')+'</div>'+
     '<div class="zkv"><span>Account owner</span><b>'+esc(uname(a.own))+'</b></div>');
@@ -85,7 +85,7 @@ function lwLeft(l,a,o){
   var sl=sib.length?sib.map(function(x){ var tag=dead(x)?chip(statusTx(x),'red',false,true):(x.status==='park'?chip('Time Pending','amber',false,true):(x.stage>=9&&x.pay!=='pre'&&x.stage<SALES_STAGES?chip('In '+payRef(x),'violet',false,true):''));
       return '<button class="zsib'+(dead(x)?' dim':'')+'" data-go="line" data-id="'+x.id+'"><b>'+esc(x.product)+'</b><span class="meta">'+esc(stageName(x.stage))+' · '+esc(uname(x.owner))+'</span>'+tag+'</button>'; }).join('')
     :'<div class="meta">'+(o?'The only product line on this opportunity.':'No other renewal lines on this account.')+'</div>';
-  var sibs=zc(o?'Other lines on '+o.id:'Other renewal lines',sl+(o?'<div class="mt8">'+addLineBtn(o,l.id,'sm full')+'</div>':''));
+  var sibs=zc(o?'Other opportunities on this account':'Other renewal opportunities',sl);
   return acc;
 }
 function lwRight(l){
@@ -117,7 +117,7 @@ SCREENS.line=function(){
   var body='';
   if(tab==='overview'){
     body='<div class="phhd"><div class="t">Captured at creation</div><div class="a">Line age <b>'+plural(daysBetween(l.createdAt,S.now),'day')+'</b></div></div><div class="kvgrid mt12">'+
-      (o?kv('Opportunity','<button class="link" data-go="opp" data-id="'+o.id+'">'+esc(oName(o))+'</button>')+kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
+      (o?kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
          :kv('Business type','Renewal <span class="meta">· no opportunity — a renewal is a product line on the account</span>'))+(l.renews?renOverview(l):'')+
       kv('Source',esc(l.src||(o?o.src:'')||'—'))+kv('Created',esc(fmtD(l.createdAt)))+
       kv('Calls',plural(callsMade(l),'call')+(l.stage<3&&!everConnected(l)&&l.status==='open'?'<div class="meta">'+(ATTEMPT_CAP-l.att)+' attempts left</div>':''))+
@@ -136,22 +136,22 @@ SCREENS.line=function(){
   else if(tab==='manage'){ body=manageTab(l); }
   var w=actingParty(l), p=prio(l);
   var ovf='<details class="ovf"><summary class="btn sm ghost" aria-label="More">'+ic('more','ic16')+'</summary><div class="menu">'+
-    '<button data-copy="1">Copy link to this line</button><button data-go="acct" data-id="'+a.id+'">Open the account</button>'+(o?'<button data-go="opp" data-id="'+o.id+'">Open the opportunity</button>':'')+'<button data-uiset="ltab_'+l.id+'" data-uv="manage">Manage</button></div></details>';
+    '<button data-copy="1">Copy link to this line</button><button data-go="acct" data-id="'+a.id+'">Open the account</button>'+'<button data-uiset="ltab_'+l.id+'" data-uv="manage">Manage</button></div></details>';
   var axes='<div class="axes">'+statusPill(l)+'<span title="'+esc(waitHow(l))+'">'+chip('Waiting on '+w,waitTone(w),false,true)+'</span>'+(p?'<span title="Renewal priority · '+esc(renInTx(renDays(l)))+'">'+prioBadge(l)+'</span>':'')+
-    (dead(l)||l.stage===14?'':chip(plural(daysInStage(l),'day')+' in stage',daysInStage(l)>=QUIET_DAYS?'red':'neutral',false,true))+chip(routeTx(l),l.rate===1?'violet':'neutral',false,true)+(l.renews?renHeadChip(l):'')+'</div>';
-  var banners=(ro?'<div class="banner '+(dead(l)?'red':(l.stage===14?'green':'neutral'))+' mt12">'+ic('lock','ic14')+'<span>'+esc(ro)+'</span></div>':'')+
+    (dead(l)||l.stage===15?'':chip(plural(daysInStage(l),'day')+' in stage',daysInStage(l)>=QUIET_DAYS?'red':'neutral',false,true))+chip(routeTx(l),l.rate===1?'violet':'neutral',false,true)+(l.renews?renHeadChip(l):'')+'</div>';
+  var banners=(ro?'<div class="banner '+(dead(l)?'red':(l.stage===15?'green':'neutral'))+' mt12">'+ic('lock','ic14')+'<span>'+esc(ro)+'</span></div>':'')+
     (isDupMerge(l)?'<div class="banner violet mt12">'+ic('info','ic14')+'<span>This line came across in an account merge and duplicates another one on the same product. It was closed as <b>Disqualified · Duplicate after merge</b>.</span></div>':'')+
     (l.renews&&renPolHit(l)&&renPolHit(l).p.endo>0?'<div class="banner amber mt12">'+ic('alert','ic14')+'<span><b>Endorsed since issue</b> — '+esc(renPolHit(l).p.pno||renPolHit(l).p.id)+' has '+plural(renPolHit(l).p.endo,'completed endorsement')+'. Check them before quoting. <button class="link" data-go="policy" data-id="'+esc(renPolHit(l).p.id)+'">Open the policy</button></span></div>':'')+
     (l.status==='park'?'<div class="banner amber mt12">'+ic('clock','ic14')+'<span><b>Time Pending</b> — revisit '+esc(fmtD(l.revisit))+' · '+esc(l.reason)+'. The stage is untouched. It comes back to Open on that date.</span></div>':'');
-  var html='<div class="lhd"><div class="crumbs"><button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+(o?'<button data-go="opp" data-id="'+o.id+'">'+esc(o.id)+'</button>'+ic('chevright','ic14'):'<span class="b">Renewal</span>'+ic('chevright','ic14'))+'<b>'+esc(l.product)+'</b></div>'+
-    '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(l.product)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span>'+(o?'<span class="sep">·</span><span>'+esc(o.id)+'</span>':'')+'<span class="sep">·</span><span>'+esc(l.id)+'</span></div></div><span class="sp"></span>'+
+  var html='<div class="lhd"><div class="crumbs"><button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+(o?'':'<span class="b">Renewal</span>'+ic('chevright','ic14'))+'<b>'+esc(l.product)+'</b></div>'+
+    '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(l.product)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>'+esc(l.id)+'</span></div></div><span class="sp"></span>'+
       '<div class="acts"><span class="ownchip" title="Owner of this product line">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span>'+(canTakeOver(l)?'<button class="btn sm" data-flow="takeover" data-line="'+l.id+'">Take ownership</button>':'')+(S.data.took.indexOf(l.id)>=0&&isMine(l)?'<button class="btn sm outline" data-flow="handback" data-line="'+l.id+'">Hand back</button>':'')+ovf+'</div></div>'+axes+'</div>'+
     banners+'<div class="mt12">'+stageTrack(l)+'</div>'+
     '<div class="lw mt16"><div class="lz lc">'+
     '<div class="tabs">'+tabs.map(function(t){return '<button data-uiset="ltab_'+l.id+'" data-uv="'+t[0]+'"'+(tab===t[0]?' class="on"':'')+'>'+t[1]+(t[0]==='tasks'&&ltasks.length?' ('+ltasks.length+')':'')+(t[0]==='tickets'&&tks.length?' ('+tks.length+')':'')+'</button>';}).join('')+'</div>'+
     '<div class="pane"><div class="pb">'+panelOr('lw-body',function(){return body;})+'</div></div></div>'+
     '<div class="lside"><div class="lz ll">'+lwLeft(l,a,o)+'<div id="nacard">'+naCard(l)+'</div></div><div class="lz lr">'+lwRight(l)+'</div></div></div>';
-  return {sc:'Product line', ctx:l.id, html:html};
+  return {sc:'Opportunity', ctx:l.id, html:html};
 };
 /* the line's Activity tab — no Log activity button: calls are logged from the call, the rest by the system [F5] */
 function lineActivity(l){ var k='lact_'+l.id, cur=S.ui[k]||'', q=(S.ui['lq_'+l.id]||'').toLowerCase();
@@ -224,10 +224,10 @@ function quotesTab(l){
 function manageTab(l){
   var u=me(), o=oppOf(l);
   var rows=[];
-  if(canAct(l)&&l.stage<SALES_STAGES) rows.push(['Change status','Time Pending, or close it as Lost, No Appetite, Disqualified'+(l.stage<=10?' or Withdrawn':'')+'. The stage is preserved either way.','status','Change status']);
+  if(canAct(l)&&l.stage<SALES_STAGES) rows.push(['Change status','Time Pending, or close it as Lost, No Appetite, Disqualified'+(l.stage<=11?' or Withdrawn':'')+'. The stage is preserved either way.','status','Change status']);
   /* [stated 26 Sep · 4.5 · TBD-58] only the owner's manager reassigns, and only inside their own team */
-  if(isMgrRole(u)&&!dead(l)&&l.stage<14&&!isMine(l)) rows.push(inMyTeam(l.owner,u)?['Reassign this product line','Moves this one line to someone in your team. The account owner does not change. Open tasks go with it.','reassign','Reassign']:['Reassign this product line','This line is outside your team.','','','Not yours to move']);
-  else if(isMine(l)&&!dead(l)&&l.stage<14&&!isMgrRole(u)) rows.push(['Reassign this product line','Only '+uname((userById(l.owner)||{}).mgr||'vikram')+' can reassign this line.','','','Manager only']);
+  if(isMgrRole(u)&&!dead(l)&&l.stage<15&&!isMine(l)) rows.push(inMyTeam(l.owner,u)?['Reassign this product line','Moves this one line to someone in your team. The account owner does not change. Open tasks go with it.','reassign','Reassign']:['Reassign this product line','This line is outside your team.','','','Not yours to move']);
+  else if(isMine(l)&&!dead(l)&&l.stage<15&&!isMgrRole(u)) rows.push(['Reassign this product line','Only '+uname((userById(l.owner)||{}).mgr||'vikram')+' can reassign this line.','','','Manager only']);
   if(canTakeOver(l)) rows.push(['Take ownership','For when '+uname(l.owner)+' is away and this cannot wait. You become the owner; the trail records it.','takeover','Take ownership']);
   if(S.data.took.indexOf(l.id)>=0&&isMine(l)) rows.push(['Hand back','Return the line to '+uname(l.prevOwner||'')+', who owned it before you took it.','handback','Hand back']);
   if(l.status==='park'&&isMine(l)) rows.push(['Resume','Take it off Time Pending. The stage never moved.','resume','Resume']);
@@ -235,7 +235,7 @@ function manageTab(l){
     (rows.length?rows.map(function(r){ return '<div><div class="bd"><b>'+esc(r[0])+'</b><div class="m">'+esc(r[1])+'</div></div><div class="rt">'+(r[2]?'<button class="btn sm" data-flow="'+r[2]+'" data-line="'+l.id+'">'+esc(r[3])+'</button>':chip(r[4]||'','neutral',false,true))+'</div></div>'; }).join(''):'<div><div class="bd meta">Nothing to manage here — '+esc(readOnlyWhy(l)||'the line is closed')+'</div></div>')+'</div>'+
     (l.iss?diamonds(true)+manageTicketBlock(l):'')+
     diamonds(true)+'<div class="h3">Related</div><div class="rowlist mt8" style="border:1px solid var(--border);border-radius:12px">'+
-    (o?'<div class="row" data-go="opp" data-id="'+o.id+'"><div class="bd"><b>'+esc(oName(o))+'</b><div class="m">'+plural(linesOfOpp(o.id).length,'product line')+' · add a line or raise a payment request across lines there</div></div><div class="rt">'+ic('chevright')+'</div></div>'
+    (o?''
        :'<div class="row" data-uiset="atab_'+l.acct+'" data-uv="ren" data-go="acct" data-id="'+l.acct+'"><div class="bd"><b>Renewals on '+esc(acctName(l))+'</b><div class="m">'+plural(renLinesOfAcct(l.acct).filter(function(x){return !dead(x);}).length,'renewal line')+' · raise a payment request across several of them there</div></div><div class="rt">'+ic('chevright')+'</div></div>')+
     '<div class="row" data-go="acct" data-id="'+l.acct+'"><div class="bd"><b>'+esc(acctName(l))+'</b><div class="m">Account 360 — policies, contacts, KYC</div></div><div class="rt">'+ic('chevright')+'</div></div></div>';
   return h;
@@ -269,7 +269,7 @@ function runSim(k,l){
       logAdd(l,'Policy copy generated in real time by Cholamandalam','System · issued on payment · no post-purchase ticket','post',1);
       logAdd(l,'Owner changed from '+uname(l.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · issued in real time','sys',1);
       l.owner=rm; tasksOfLine(l.id).forEach(function(t){ if(!t.done) t.owner=rm; }); if(a) a.own=rm;
-      moveStage(l,11,'Paid on Chola link · policy issued in real time'); }
+      moveStage(l,12,'Paid on Chola link · policy issued in real time'); }
     if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-CHOLA_TTL-1; logAdd(l,'Payment link expired','System · the 24-hour Cholamandalam link lapsed unpaid · regenerate to send a fresh link','sys',1); }
   },'the simulated event');
   if(!ok) return;
@@ -529,24 +529,24 @@ FLOWS.confirm={t:'Record client confirmation', sub:'They named an insurer and a 
       (exp?note('amber','These quotes have expired','An expired quote cannot be confirmed. Send the QCR back for fresh quotes.','alert'):note('blue','','Confirmed premium is the revenue number. It is written here and not again.')); },
   repaintOn:[],
   can:function(){return !!S.sel.d&&S.now<=quoteUntil(FL());}, ok:'Confirm',
-  run:function(){ var l=FL(), made=[]; var ok=write(function(){ l.picked=S.sel.d; l.ins=S.sel.d; if(isChola(l)) l.chola={conf:S.now}; logAdd(l,'Client confirmed insurer',uname(S.user)+' · '+S.sel.d,'call'); made=moveStage(l,9,'Client confirmed '+S.sel.d); },'the confirmation'); if(!ok) return 'fail'; toast('Client confirmed '+l.picked,stageToast(l,made)); }};
+  run:function(){ var l=FL(), made=[]; var ok=write(function(){ l.picked=S.sel.d; l.ins=S.sel.d; if(isChola(l)) l.chola={conf:S.now}; logAdd(l,'Client confirmed insurer',uname(S.user)+' · '+S.sel.d,'call'); var _a=acctOf(l),_dest=(isChola(l)||verified(_a))?10:9; made=moveStage(l,_dest,'Client confirmed '+S.sel.d); },'the confirmation'); if(!ok) return 'fail'; toast('Client confirmed '+l.picked,stageToast(l,made)); }};
 
 /* ---------- Cholamandalam real-time issuance (WC · DUA) ---------- */
 function cholaSalesNext(l){
   var ch=l.chola||{}, a=acctOf(l);
-  if(l.stage===9){
+  if(l.stage===10){
     if(!ch.kyc) return {tone:'amber',lab:'Next action',txt:'Run real-time KYC with Cholamandalam',why:'Chola writes Workmen’s Compensation on a live API. Capture the issuance details, upload PAN and GST for OCR, and clear KYC — no payment ticket is raised.',acts:[['cholaKyc','Run KYC with Cholamandalam']]};
     return {tone:'amber',lab:'Next action',txt:'KYC cleared — generate the payment link',why:'Cholamandalam returned KYC success. Generate the live payment link and share it with '+((l.contact||{}).n||'the client')+'. It is valid for 24 hours.',acts:[['cholaLink','Generate payment link']]};
   }
-  if(l.stage===10){
+  if(l.stage===11){
     if(cholaLinkExpired(l)) return {tone:'red',lab:'Link expired',txt:'The payment link expired after 24 hours',why:'The 24-hour Cholamandalam link lapsed unpaid. Regenerate it to send '+((l.contact||{}).n||'the client')+' a fresh link.',acts:[['cholaLink','Regenerate payment link']]};
     return {tone:'blue',lab:'Waiting on the client',txt:'Payment link sent · expires in '+cholaLinkLeft(l)+'h · policy issues on payment',why:'Cholamandalam’s link ('+(ch.link||'')+') is with '+((l.contact||{}).n||'the client')+'. No screenshot and no confirm step — when they pay, Chola issues the policy copy in real time. The link is valid 24 hours.',acts:[['cholaLink','View the link']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
 function cholaPostNext(l){
-  if(l.stage===11) return {tone:'amber',lab:'Next action',txt:'Paid — Cholamandalam issued the policy in real time. Share the copy with the client',why:'The client paid on Chola’s link and the policy copy was generated instantly — no payment ticket and no post-purchase ticket. Share it with '+((l.contact||{}).n||'the client')+' to close the sale.',acts:[['cholaShare','Share the policy copy']]};
-  if(l.stage===14) return {tone:'green',lab:'Issued',txt:'Policy copy shared · issued in real time via Cholamandalam',why:'Chola issued the policy on payment and you shared the copy. No payment ticket and no post-purchase ticket were needed.',acts:[]};
+  if(l.stage===12) return {tone:'amber',lab:'Next action',txt:'Paid — Cholamandalam issued the policy in real time. Share the copy with the client',why:'The client paid on Chola’s link and the policy copy was generated instantly — no payment ticket and no post-purchase ticket. Share it with '+((l.contact||{}).n||'the client')+' to close the sale.',acts:[['cholaShare','Share the policy copy']]};
+  if(l.stage===15) return {tone:'green',lab:'Issued',txt:'Policy copy shared · issued in real time via Cholamandalam',why:'Chola issued the policy on payment and you shared the copy. No payment ticket and no post-purchase ticket were needed.',acts:[]};
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
 function cholaIssue(l){
@@ -555,7 +555,7 @@ function cholaIssue(l){
   p.pno=insPolNo(p); p.period=fmtD(S.now)+' – '+fmtD(S.now+365*86400000-86400000); p.issuedAt=S.now;
   a.pols.push(p); l.chola=l.chola||{}; l.chola.policy=p.id;
 }
-function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=10?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Details returned':(l.pay==='shared'?'Shared with client':'Paid'))); }
+function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Details returned':(l.pay==='shared'?'Shared with client':'Paid'))); }
   return '<div class="phhd"><div class="t">Sold</div></div><div class="kvgrid mt12">'+kv('Insurer',esc(l.picked||l.ins||'—'))+kv('Confirmed premium','<b>'+INR(premOf(l))+'</b>')+kv('Payment',esc(payTx))+'</div>'; }
 function docsTab(l){ var a=acctOf(l), p=polOfLine(l), ins=l.picked||l.ins||'the insurer';
   var rows=[docRow('Quote Comparison Report',true,'',{line:l.id},'The quotes the client compared'),
@@ -621,14 +621,14 @@ FLOWS.cholaLink={t:function(){ var l=FL(); return (l.chola&&l.chola.link&&!chola
       '<div class="field"><div class="lbl">Payment link</div><div class="flex" style="gap:8px;align-items:center"><input class="inp mono" value="'+esc(link)+'" readonly style="flex:1 1 auto;min-width:0"><button type="button" class="btn sm" data-copy="1">'+ic('copy','ic14')+'Copy link</button></div></div>'+
       (ch.sentAt&&valid?note('green','','Sent to '+esc(ch.sentTo||em||'the client')+' on '+esc(fmt(ch.sentAt))+' · valid for '+cholaLinkLeft(l)+' more hours. The policy issues in real time when they pay.','circlecheck'):note('blue','',(valid?'Valid for '+cholaLinkLeft(l)+' more hours. ':'Valid for 24 hours once sent. ')+(em?'Send payment link emails it to '+esc(em)+' (the contact on this line). ':'')+'The policy issues in real time the moment they pay.','info')); },
   ok:function(){ var l=FL(), ch=l.chola||{}; return (ch.link&&!cholaLinkExpired(l)&&ch.sentAt)?'Resend payment link':'Send payment link'; },
-  run:function(){ var l=FL(), em=(l.contact||{}).e; var regen=!!(l.chola&&l.chola.link&&cholaLinkExpired(l)); var ok=write(function(){ l.chola=l.chola||{}; if(!l.chola.link||cholaLinkExpired(l)){ l.chola.link=cholaLink(l); l.chola.linkAt=S.now; } l.chola.sentAt=S.now; l.chola.sentTo=em||'the client'; logAdd(l,(regen?'Payment link regenerated and sent':'Payment link sent')+' to '+(em||'the client'),'System · email · '+l.chola.link+' · valid 24 hours · no payment ticket','email',1); if(l.stage<10) moveStage(l,10,'Payment link sent to the client'); },'sending the link'); if(!ok) return 'fail'; toast('Payment link sent','Emailed to '+(em||'the client')+'. Valid for 24 hours — the policy issues in real time when they pay.'); }};
+  run:function(){ var l=FL(), em=(l.contact||{}).e; var regen=!!(l.chola&&l.chola.link&&cholaLinkExpired(l)); var ok=write(function(){ l.chola=l.chola||{}; if(!l.chola.link||cholaLinkExpired(l)){ l.chola.link=cholaLink(l); l.chola.linkAt=S.now; } l.chola.sentAt=S.now; l.chola.sentTo=em||'the client'; logAdd(l,(regen?'Payment link regenerated and sent':'Payment link sent')+' to '+(em||'the client'),'System · email · '+l.chola.link+' · valid 24 hours · no payment ticket','email',1); if(l.stage<11) moveStage(l,11,'Payment link sent to the client'); },'sending the link'); if(!ok) return 'fail'; toast('Payment link sent','Emailed to '+(em||'the client')+'. Valid for 24 hours — the policy issues in real time when they pay.'); }};
 FLOWS.cholaShare={t:'Share the policy copy', sub:'Cholamandalam issued it on payment. Send it to the client — there is no QC step and no ticket.', wide:true,
   body:function(){ var l=FL(), p=polOfLine(l);
     return '<div class="flex" style="gap:8px">'+docBtns('Policy copy',{line:l.id})+docBtns('Tax invoice',{line:l.id})+'</div>'+
       '<div class="kvgrid two mt12">'+kv('Insurer',esc(l.picked||l.ins))+kv('Policy number','<span class="mono">'+esc(p?p.pno:'—')+'</span>')+kv('Premium','<b>'+INR(premOf(l))+'</b>')+kv('Sum insured',esc((l.req||{}).si||'—'))+'</div>'+
       note('blue','','Cholamandalam issued the policy copy and tax invoice in real time when the client paid. Sharing sends them to '+esc((l.contact||{}).n||'the client')+' on the three rails and closes the line — no QC and no post-purchase ticket.','info'); },
   ok:'Share policy copy',
-  run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by Cholamandalam · three rails · no post-purchase ticket','post',1); moveStage(l,14,'Policy copy shared with the client'); },'the share'); if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client. Issued in real time — no ticket.'); }};
+  run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by Cholamandalam · three rails · no post-purchase ticket','post',1); moveStage(l,15,'Policy copy shared with the client'); },'the share'); if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client. Issued in real time — no ticket.'); }};
 function cholaWcAcct(){ var l=(S.data.lines||[]).filter(function(x){return x.product===WC_PRODUCT;})[0]; return l?acctOf(l):by(S.data.accounts,'A-1001'); }
 HANDLERS.push(function(t){
   var x=t.closest('[data-cholaback]'); if(x){ S.sel.cstep=Math.max(0,(S.sel.cstep||0)-1); paintModal(); return true; }

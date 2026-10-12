@@ -117,7 +117,7 @@ function durMins(n,u){ return u==='h' ? n*60 : n*(WH.end-WH.start)*60; }
 function durTx(n,u){ return n+' working '+(u==='h'?(n==1?'hour':'hours'):(n==1?'day':'days')); }
 
 /* ---------- state ---------- */
-var KEY='bksales.v16';
+var KEY='bksales.v20';
 var S={user:null, now:T0.getTime(), route:{v:'signin'}, hist:[], data:null, flow:null, sel:{}, ui:{}, offline:false, pending:null, side:false};
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({user:S.user, now:S.now, data:S.data, route:S.route})); }catch(e){} }
 function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return false; var o=JSON.parse(raw); if(!o||!o.data||!o.data.lines) return false; S.user=o.user; S.now=o.now||T0.getTime(); S.data=o.data; S.route=o.route&&o.route.v!=='signin'?o.route:{v:'home'}; return true; }catch(e){ return false; } }
@@ -134,6 +134,7 @@ function retry(){ if(S.offline){ toast('Still offline','Reconnect from the sideb
 
 /* ---------- router ---------- */
 function go(v,p,replace){
+  if(S.ui){S.ui.paymode=false;S.ui.paysel=[];}
   var r={v:v}; if(p) for(var k in p) r[k]=p[k];
   if(!replace && S.route && S.route.v!=='signin'){ S.hist.push(S.route); if(S.hist.length>40) S.hist.shift(); }
   S.route=r; S.flow=null; S.sel={}; S.side=false; window.scrollTo(0,0); save(); paint();

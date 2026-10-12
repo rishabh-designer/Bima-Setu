@@ -112,32 +112,33 @@ SCREENS.pipeline=function(){
   var u=me(), f=S.ui.pf||(isRmRole(u)?'all':'open'), q=(S.ui.pq||'').toLowerCase(), prod=S.ui.pprod||'', st=S.ui.pstage||'';
   /* [stated 23 Sep] scoped by the view switch — own lines, or the team's */
   var lines=S.data.lines.filter(function(l){return inScope(l.owner,u);}), tv=teamView(u);
-  var counts={open:lines.filter(openLine).length, post:lines.filter(postLine).length, issued:lines.filter(issuedLine).length, park:lines.filter(function(l){return l.status==='park';}).length, closed:lines.filter(dead).length, all:lines.length};
-  var rows=lines.filter(function(l){
+  var wonMine=S.data.lines.filter(function(l){return l.soldBy===u.id && l.stage>=SALES_STAGES && !dead(l);});
+  var counts={open:lines.filter(openLine).length, post:lines.filter(postLine).length, issued:lines.filter(issuedLine).length, park:lines.filter(function(l){return l.status==='park';}).length, closed:lines.filter(dead).length, all:lines.length, won:wonMine.length};
+  var rows=(f==='won'?wonMine:lines).filter(function(l){
     if(f==='open'&&!openLine(l)) return false; if(f==='post'&&!postLine(l)) return false; if(f==='issued'&&!issuedLine(l)) return false; if(f==='park'&&l.status!=='park') return false; if(f==='closed'&&!dead(l)) return false;
     if(prod&&l.product!==prod) return false; if(st&&String(l.stage)!==st) return false;
     if(q&&(acctName(l)+' '+l.product+' '+l.id+' '+oppName(l)).toLowerCase().indexOf(q)<0) return false; return true;
   }).sort(function(x,y){ return (y.stage-x.stage)||(webPrioRank(x)-webPrioRank(y))||(daysInStage(y)-daysInStage(x)); });
   var prods=[]; lines.forEach(function(l){ if(prods.indexOf(l.product)<0) prods.push(l.product); });
-  var html='<div class="hdrow"><div><div class="h1">Pipeline</div><div class="sub">'+(tv?'Every product line your team owns.':'Every product line you own.')+'</div></div></div>'+diamonds()+
-    pills('pf',f,[['open','Selling',counts.open],['post','Post-purchase',counts.post],['issued','Issued',counts.issued],['park','Parked',counts.park],['closed','Closed',counts.closed],['all','All',counts.all]])+
+  var html='<div class="hdrow"><div><div class="h1">Opportunities</div><div class="sub">'+(tv?'Every opportunity your team owns.':'Every opportunity you own.')+'</div></div><span class="sp"></span>'+payBtn(lines,u)+'</div>'+diamonds()+
+    pills('pf',f,[['open','Selling',counts.open],['post','Post-purchase',counts.post],['issued','Issued',counts.issued],['won','Won',counts.won],['park','Parked',counts.park],['closed','Closed',counts.closed],['all','All',counts.all]])+
     '<div class="flex wrap mt12" style="gap:10px"><input class="inp" id="pq" data-ui="pq" style="max-width:280px" placeholder="Account, product, line or opportunity" value="'+esc(S.ui.pq||'')+'">'+
       '<select class="sel" data-uisel="pprod" style="max-width:220px"><option value="">All products</option>'+prods.map(function(p){return '<option'+(prod===p?' selected':'')+'>'+esc(p)+'</option>';}).join('')+'</select>'+
       '<select class="sel" data-uisel="pstage" style="max-width:240px"><option value="">All stages</option>'+STAGES.map(function(s){return '<option value="'+s.n+'"'+(st===String(s.n)?' selected':'')+'>'+esc(s.s)+'</option>';}).join('')+'</select>'+
       (q||prod||st?'<button class="btn ghost sm" data-clearpf="1">Clear filters</button>':'')+'</div>'+
-    '<div class="card mt16" style="overflow:hidden">'+(rows.length?'<div class="tw"><table class="t"><thead><tr><th>Line</th><th><span class="f">'+ic('chevdown')+'Stage</span></th><th>Waiting on</th><th>Account</th>'+(tv?'<th>Owner</th>':'')+'<th>Opportunity</th><th class="num">Premium</th><th>In stage</th></tr></thead><tbody>'+
-      rows.map(function(l){ var w=actingParty(l); return '<tr class="row'+(dead(l)?' dim':'')+'" data-go="line" data-id="'+l.id+'"><td class="id">'+esc(l.id)+' '+prioBadge(l)+'<div class="sub" style="color:var(--ink);font-weight:500">'+esc(l.product)+'</div></td>'+
-        '<td>'+chip(stageName(l.stage),l.stage===14?'green':(l.stage>=SALES_STAGES?'violet':(dead(l)?'red':(l.status==='park'?'amber':'neutral'))),true,true)+(l.status!=='open'?'<div class="sub">'+esc(statusTx(l))+'</div>':'')+'</td>'+
-        '<td>'+chip(w,waitTone(w),false,true)+'</td><td class="nm one" title="'+esc(acctName(l))+'">'+esc(shortName(acctName(l)))+'</td>'+(tv?'<td class="one">'+esc(uname(l.owner))+'</td>':'')+'<td class="one">'+esc(l.opp||'Renewal')+'</td><td class="num">'+(confirmed(l)?'<b class="b">'+INR(premOf(l))+'</b>':'<span class="meta">'+INR(premOf(l))+' est.</span>')+'</td>'+
-        '<td>'+(l.stage===14?'—':plural(daysInStage(l),'day'))+'</td></tr>'; }).join('')+'</tbody></table></div>'
+    '<div class="card mt16" style="overflow:hidden">'+(rows.length?'<div class="tw"><table class="t"><thead><tr>'+(S.ui.paymode?'<th style="width:34px"></th>':'')+'<th>Opportunity</th><th><span class="f">'+ic('chevdown')+'Stage</span></th><th>Waiting on</th><th>Account</th>'+(tv?'<th>Owner</th>':'')+'<th class="num">Premium</th><th>In stage</th></tr></thead><tbody>'+
+      rows.map(function(l){ var w=actingParty(l); return '<tr class="row'+(dead(l)?' dim':'')+'" data-go="line" data-id="'+l.id+'">'+(S.ui.paymode?'<td style="text-align:center">'+payChk(l,u)+'</td>':'')+'<td class="id">'+esc(l.id)+' '+prioBadge(l)+'<div class="sub" style="color:var(--ink);font-weight:500">'+esc(l.product)+'</div></td>'+
+        '<td>'+chip(stageName(l.stage),l.stage===15?'green':(l.stage>=SALES_STAGES?'violet':(dead(l)?'red':(l.status==='park'?'amber':'neutral'))),true,true)+((l.status!=='open'||l.stage>=SALES_STAGES)?'<div class="sub">'+esc(statusTx(l))+'</div>':'')+'</td>'+
+        '<td>'+chip(w,waitTone(w),false,true)+'</td><td class="nm one" title="'+esc(acctName(l))+'">'+esc(shortName(acctName(l)))+'</td>'+(tv?'<td class="one">'+esc(uname(l.owner))+'</td>':'')+'<td class="num">'+(confirmed(l)?'<b class="b">'+INR(premOf(l))+'</b>':'<span class="meta">'+INR(premOf(l))+' est.</span>')+'</td>'+
+        '<td>'+(l.stage===15?'—':plural(daysInStage(l),'day'))+'</td></tr>'; }).join('')+'</tbody></table></div>'
       : empty('filter', q||prod||st?'No line matches those filters':'No '+(f==='open'?'selling':(f==='post'?'post-purchase':f))+' lines', q||prod||st?'Clear a filter, or search for the account by name from the sidebar.':'Lines arrive from inbound enquiries, from <b>New opportunity</b>, or by reassignment.', q||prod||st?'<button class="btn" data-clearpf="1">Clear filters</button>':''))+'</div>';
-  return {sc:'Pipeline', html:html};
+  html+=paySelBar(); return {sc:'Opportunities', html:html};
 };
 HANDLERS.push(function(t){ if(t.closest('[data-clearpf]')){ S.ui.pq='';S.ui.pprod='';S.ui.pstage=''; paint(); return true; } return false; });
 
 /* ---------- tasks ---------- */
 SCREENS.tasks=function(){
-  var u=me(), all=S.data.tasks.filter(function(t){return t.owner===u.id;}), cls=S.ui.tcls||'', att=S.ui.tatt||'', rec=S.ui.trec||'', sf=S.ui.tst||'';
+  var u=me(), all=(u.role==='admin'?S.data.tasks.slice():S.data.tasks.filter(function(t){return t.owner===u.id;})), cls=S.ui.tcls||'', att=S.ui.tatt||'', rec=S.ui.trec||'', sf=S.ui.tst||'';
   var esc2=isMgrRole(u)?escalatedTo(u.id):[];
   var pass=function(t){ if(cls&&t.cls!==cls) return false; if(att==='line'&&!t.line) return false; if(att==='acct'&&t.line) return false;
     var l=t.line?lineById(t.line):null; if(rec==='open'&&l&&dead(l)) return false; if(rec==='closed'&&!(l&&dead(l))) return false; if(sf&&!t.done&&taskState(t)!==sf) return false; if(sf&&t.done) return false; return true; };
@@ -198,12 +199,12 @@ FLOWS.closeTask={t:'Close an escalated task', sub:'It leaves the owner’s list 
 
 /* ---------- tickets: placement, payment, post-purchase, endorsements and claims — one list ---------- */
 function ticketRows(u){
-  var rows=[], mineLines=function(l){ return l.owner===u.id; };
+  var rows=[], ADMIN=(u.role==='admin'), mineLines=function(l){ return ADMIN||l.owner===u.id; };
   /* [stated 23 Sep] the view switch scopes this list too */
   var scopeLines = hasViews(u)&&!teamView(u) ? mineLines
                  : (u.role==='mgr' ? function(l){ var o=userById(l.owner); return l.owner===u.id||(o&&o.mgr===u.id); }
                  : (u.role==='rmhead' ? function(l){ var o=userById(l.owner); return (o&&o.mgr===u.id)||l.owner===u.id; } : mineLines));
-  var scopeAcct = function(a){ if(!a) return false;
+  var scopeAcct = function(a){ if(!a) return false; if(ADMIN) return true;
     if(hasViews(u)&&!teamView(u)) return a.own===u.id||linesOfAcct(a.id).some(mineLines);
     if(u.role==='rm') return a.own===u.id;
     if(u.role==='rmhead') return a.own===u.id||rmTeam(u.id).some(function(x){return x.id===a.own;});
@@ -229,7 +230,7 @@ SCREENS.tickets=function(){
   return {sc:'Tickets', html:html, cta:''};
 };
 FLOWS.raiseReq={t:'Raise a request', sub:'Placement and payment requests are raised from the product line they belong to; endorsements and claims by the account’s RM.', nofoot:function(){return true;},
-  body:function(){ var u=me(), mine=S.data.lines.filter(function(l){return l.owner===u.id&&openLine(l);}), plc=mine.filter(function(l){return l.rate===0&&(l.stage===5||(l.stage===3&&l.rfq&&l.rfq.f&&!rfqCount(l).missing));}), pay=mine.filter(function(l){return l.stage===9&&l.pay==='pre';});
+  body:function(){ var u=me(), mine=S.data.lines.filter(function(l){return l.owner===u.id&&openLine(l);}), plc=mine.filter(function(l){return l.rate===0&&(l.stage===5||(l.stage===3&&l.rfq&&l.rfq.f&&!rfqCount(l).missing));}), pay=mine.filter(function(l){return l.stage===10&&l.pay==='pre';});
     var row=function(title,sub,btn){ return '<div class="row" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><b>'+title+'</b><div class="meta">'+sub+'</div></div>'+btn+'</div>'; };
     return row('Float an RFQ to placement','From a non-DUA line whose RFQ the client verified, or that you filled completely yourself. '+(plc.length?plural(plc.length,'line')+' ready now.':'None ready right now.'),plc.length?'<button class="btn sm primary" data-flow="float" data-line="'+plc[0].id+'">'+esc(acctName(plc[0]))+' · '+esc(plc[0].product)+'</button>':'<button class="btn sm ghost" data-go="pipeline">Pipeline</button>')+
       row('Raise a payment request','From a line at Purchase Requested, once the client has confirmed. '+(pay.length?plural(pay.length,'line')+' ready now.':'None ready right now.'),pay.length?'<button class="btn sm primary" data-flow="pay" data-line="'+pay[0].id+'">'+esc(acctName(pay[0]))+' · '+esc(pay[0].product)+'</button>':'<button class="btn sm ghost" data-go="pipeline">Pipeline</button>')+
@@ -246,7 +247,7 @@ function lineTicketOpts(l){
     :(l.stage===3&&rc&&rc.missing?plural(rc.missing,'required RFQ field')+' still empty.'
     :(l.stage===5||l.stage===3?'':'Placement is raised from Details Captured or RFQ Verified.')))));
   out.push({k:'plc',t:'Placement ticket',s:'Float the RFQ to BimaPlacement for quotes',why:plcWhy,btn:'<button class="btn sm primary" data-flow="float" data-line="'+l.id+'">Float to placement</button>'});
-  var payWhy= l.stage<9?'Opens at Purchase Requested, once the client confirms an insurer.':(l.pay!=='pre'||l.stage>9?'Already raised — '+payRef(l)+'.':'');
+  var payWhy= l.stage<10?'Opens at Purchase Requested, once the client confirms an insurer.':(l.pay!=='pre'||l.stage>10?'Already raised — '+payRef(l)+'.':'');
   out.push({k:'pay',t:'Payment ticket',s:'Ask Ops for the payment details for the chosen insurer',why:payWhy,btn:'<button class="btn sm primary" data-flow="pay" data-line="'+l.id+'">Raise payment request</button>'});
   var own=a&&a.own===S.user, issued=p&&!p.issuing;
   var svcWhy= !issued?'Opens once the policy is issued.':(!own?'Raised by '+uname(a.own)+', who owns the account.':'');
@@ -295,5 +296,5 @@ SCREENS.search=function(){
 
 /* ---------- not found ---------- */
 SCREENS.notfound=function(){
-  return {sc:'Not found', html:empty('alert','That record isn’t here','It may have been deleted, merged into another account, or the link is wrong. '+(S.route.id?'Nothing has the ID <b>'+esc(S.route.id)+'</b>.':''),'<button class="btn" data-back="1">'+ic('arrowleft')+'Go back</button> <button class="btn ghost" data-nav="'+(isRole('mgr')?'team':(isRole('rm')?'rmhome':(isRole('rmhead')?'rmteam':'home')))+'">Home</button>')};
+  return {sc:'Not found', html:empty('alert','That record isn’t here','It may have been deleted, merged into another account, or the link is wrong. '+(S.route.id?'Nothing has the ID <b>'+esc(S.route.id)+'</b>.':''),'<button class="btn" data-back="1">'+ic('arrowleft')+'Go back</button> <button class="btn ghost" data-nav="'+(isRole('admin')?'adminhome':(isRole('mgr')?'team':(isRole('rm')?'rmhome':(isRole('rmhead')?'rmteam':'home'))))+'">Home</button>')};
 };

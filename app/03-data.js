@@ -10,14 +10,15 @@ var STAGES=[
  {n:6, s:'Quote Requested',              t:'Quote Requested', w:'Us'},
  {n:7, s:'Quotes Received',              t:'Quotes Received', w:'Us'},
  {n:8, s:'Quote Sent',                   t:'Quote Sent',      w:'Client'},
- {n:9, s:'Purchase Requested',           t:'Purchase Requested', w:'Us'},
- {n:10,s:'Payment Details Shared with Client', t:'Details Shared', w:'Client'},
- {n:11,s:'Payment Completed',            t:'Payment Completed', w:'Us'},
- {n:12,s:'Policy Documents Pending',     t:'Docs Pending',    w:'Client'},
- {n:13,s:'Awaiting Policy Copy',         t:'Awaiting Copy',   w:'Insurer'},
- {n:14,s:'Policy Copy Sent to Client',   t:'Copy Sent',       w:'—'}
+ {n:9, s:'KYC Details Requested',        t:'KYC Requested',   w:'Client'},
+ {n:10,s:'Purchase Requested',           t:'Purchase Requested', w:'Us'},
+ {n:11,s:'Payment Details Shared with Client', t:'Details Shared', w:'Client'},
+ {n:12,s:'Payment Completed',            t:'Payment Completed', w:'Us'},
+ {n:13,s:'Policy Documents Pending',     t:'Docs Pending',    w:'Client'},
+ {n:14,s:'Awaiting Policy Copy',         t:'Awaiting Copy',   w:'Insurer'},
+ {n:15,s:'Policy Copy Sent to Client',   t:'Copy Sent',       w:'—'}
 ];
-var SALES_STAGES=11; /* ownership moves to the RM at 11; 12–14 are the post-purchase ticket's stages */
+var SALES_STAGES=12; /* ownership moves to the RM at 12 (Payment Completed); 13–15 are the post-purchase ticket's stages */
 var CATOF={'Fire & Special Perils':'Property & casualty','Burglary':'Property & casualty','Workmen’s Compensation':'Property & casualty',
  'Industrial All Risk':'Property & casualty','Contractors All Risk':'Property & casualty','Erection All Risk':'Property & casualty',
  'Marine Cargo':'Marine & liability','Commercial General Liability':'Marine & liability','Cyber Liability':'Marine & liability',
@@ -102,7 +103,8 @@ function seed(){
    {id:'vikram', n:'Vikram Rao',    role:'mgr',  cat:'', mgr:'', title:'Sales manager · P&C and Marine team'},
    {id:'priya',  n:'Priya Nair',    role:'rm',   cat:'', mgr:'meera', title:'Relationship manager'},
    {id:'meera',  n:'Meera Pillai',  role:'rmhead', cat:'', mgr:'', title:'Head of relationship management'},
-   {id:'radha',  n:'Radha Iyer',    role:'cs',   cat:'', mgr:'', title:'Customer Success · post-purchase desk'}
+   {id:'radha',  n:'Radha Iyer',    role:'cs',   cat:'', mgr:'', title:'Customer Success · post-purchase desk'},
+   {id:'admin',  n:'Aditya Verma',  role:'admin', cat:'', mgr:'', title:'Administrator · full access'}
   ];
   function A(id,n,pan,gst,o){ var a=Object.assign({id:id,n:n,trade:'',pan:pan||'',gst:gst||'',city:'',st:'',ind:'',emp:'',to:'',grp:'—',own:'nikhil',prov:0,con:[],pols:[],recs:[],prof:null,fin:null,sis:[],createdAt:ago(400),createdBy:'nikhil',log:[]},o||{}); if(!a.prov){ a.kycBy=a.kycBy||a.own; a.kycAt=a.kycAt||a.createdAt+20*86400000; a.kycHow=a.kycHow||(a.aad?'PAN card and Aadhaar uploaded':'PAN card and GST certificate uploaded · PAN matched the PAN inside the GSTIN'); } return a; }
   var accounts=[
@@ -119,13 +121,25 @@ function seed(){
    A('A-1003','Meridian Chemicals Ltd','AACCM2210K','24AACCM2210K1Z9',{city:'Vadodara',st:'Gujarat',ind:'Specialty chemicals',emp:'680',to:'₹410 Cr',grp:'Meridian Group',own:'nikhil',createdAt:ago(30),
      con:[{n:'Devang Shah',d:'Head of Risk',m:'+91 99240 18876',e:'devang.shah@meridianchem.com',dm:1}],
      prof:{risk:'High',cls:'Manufacture of chemicals · NIC 20119',exp:'Two independent directors appointed in FY26. Directors & Officers is the live need.'},
-     fin:{rev:'₹410.2 Cr',pat:'₹31.4 Cr',net:'₹188.0 Cr',yr:'FY 2025-26',cin:'L24100GJ1994PLC021118',read:'8 Sep 2026'}})
+     fin:{rev:'₹410.2 Cr',pat:'₹31.4 Cr',net:'₹188.0 Cr',yr:'FY 2025-26',cin:'L24100GJ1994PLC021118',read:'8 Sep 2026'}}),
+   A('A-1004','Crestline Logistics Pvt Ltd','AADCL5567P','29AADCL5567P1Z4',{trade:'Crestline',city:'Bengaluru',st:'Karnataka',ind:'Logistics & warehousing',emp:'320',to:'₹120 Cr',own:'nikhil',createdAt:ago(22),
+     con:[{n:'Kavya Rao',d:'Finance Controller',m:'+91 98860 33210',e:'kavya.rao@crestline.in',dm:1}],
+     prof:{risk:'Moderate',cls:'Logistics & warehousing · NIC 52109',exp:'Two warehouses in Bengaluru. Buying Fire and Burglary together — one payment.'},
+     fin:{rev:'₹120.5 Cr',pat:'₹6.2 Cr',net:'₹44.0 Cr',yr:'FY 2025-26',cin:'U63030KA2013PTC071145',read:'10 Sep 2026'}}),
+   A('A-1005','Vantage Textiles Pvt Ltd','AAFCV7721R','33AAFCV7721R1Z8',{trade:'Vantage',city:'Coimbatore',st:'Tamil Nadu',ind:'Textile manufacturing',emp:'520',to:'₹210 Cr',own:'nikhil',createdAt:ago(19),
+     con:[{n:'Suresh Iyer',d:'CFO',m:'+91 98430 55120',e:'suresh.iyer@vantagetex.in',dm:1}],
+     prof:{risk:'Moderate',cls:'Textile manufacturing · NIC 13111',exp:'Buying Group Health and Marine together — one payment across two opportunities.'},
+     fin:{rev:'₹210.0 Cr',pat:'₹12.0 Cr',net:'₹80.0 Cr',yr:'FY 2025-26',cin:'U17111TZ2011PTC017882',read:'9 Sep 2026'}})
   ];
   function O2(id,acct,type,bt,src,created,by_){ var a=by(accounts,acct); return {id:id,acct:acct,type:type,bt:bt,src:src,created:created,by:by_}; }
   var opps=[
    O2('OPP-001001','A-1001','New Business','Fresh','Website',ago(0,2),'system'),
    O2('OPP-001002','A-1002','New Business','Fresh','Website',ago(0,4),'system'),
-   O2('OPP-001003','A-1003','New Business','Fresh','Website',ago(0,6),'system')
+   O2('OPP-001003','A-1003','New Business','Fresh','Website',ago(0,6),'system'),
+   O2('OPP-001004','A-1004','New Business','Fresh','Referral',ago(12),'nikhil'),
+   O2('OPP-001005','A-1004','New Business','Fresh','Referral',ago(12),'nikhil'),
+   O2('OPP-001006','A-1005','New Business','Fresh','Referral',ago(10),'nikhil'),
+   O2('OPP-001007','A-1005','New Business','Fresh','Referral',ago(10),'nikhil')
   ];
   var contactsOf=function(acct){ var a=by(accounts,acct); return a&&a.con[0]?{n:a.con[0].n,e:a.con[0].e||'',m:a.con[0].m||''}:{n:'',e:'',m:''}; };
   function L(id,opp,acct,product,owner,stage,o){
@@ -136,7 +150,7 @@ function seed(){
       round:1,qAns:o.qAns||0,obj:'',qsel:[],picked:o.picked||'',prem:o.prem||240000,ins:o.ins||'',pay:o.pay||'pre',payMode:o.payMode||'',amt:0,payLines:[],renews:o.renews||'',
       enteredAt:o.enteredAt||ago(idle),createdAt:created,assignedAt:o.assignedAt||created,src:o.src||'',contact:contactsOf(acct),
       log:o.log||[{at:created,t:'Product line created',m:'System',sys:1,kind:'sys'}]};
-    if(stage>=8 && !l.picked && stage<11) l.picked='';
+    if(stage>=8 && !l.picked && stage<12) l.picked='';
     if(stage>=9 && !l.picked) l.picked = l.rate?'ICICI Lombard':'New India Assurance';
     if(l.picked) l.ins=l.picked;
     if(stage>=2 && idle>0 && !o.log) l.log.push({at:ago(idle),t:'Stage entered: '+STAGES[stage-1].s,m:'System',sys:1,kind:'stage'});
@@ -149,7 +163,12 @@ function seed(){
    /* Non-DUA case — Cyber Liability (never rateable → RFQ, then placement) */
    L('OP-2002','OPP-001002','A-1002','Cyber Liability','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,4),createdAt:ago(0,4),prem:142000}),
    /* DUA-turned-Non-DUA case — D&O starts DUA (made rateable above) then switches on an empty rater */
-   L('OP-2003','OPP-001003','A-1003','Directors & Officers','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,6),createdAt:ago(0,6),prem:210000})
+   L('OP-2003','OPP-001003','A-1003','Directors & Officers','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,6),createdAt:ago(0,6),prem:210000}),
+   /* [12 Oct · demo] two opportunities on one account at Purchase Requested — the payment multi-select */
+   L('OP-2004','OPP-001004','A-1004','Fire & Special Perils','nikhil',10,{idle:3,src:'Referral',prem:180000,si:'₹40 Cr',picked:'ICICI Lombard'}),
+   L('OP-2005','OPP-001005','A-1004','Burglary','nikhil',10,{idle:3,src:'Referral',prem:95000,si:'₹8 Cr',picked:'Tata AIG'}),
+   L('OP-2006','OPP-001006','A-1005','Group Health','nikhil',10,{idle:2,src:'Referral',prem:640000,si:'₹5 L/employee',picked:'ICICI Lombard'}),
+   L('OP-2007','OPP-001007','A-1005','Marine Cargo','nikhil',10,{idle:2,src:'Referral',prem:84000,si:'₹6 Cr',picked:'New India Assurance'})
   ];
   /* postSeed skipped — the 3-line demo seeds no paid/post-purchase lines */
   /* [8 Oct · demo] A small RM book: four issued post-purchase lines split across the two
@@ -160,7 +179,7 @@ function seed(){
       var a=by(accounts, acc);
       a.pols.push({id:polId, ins:ins, p:prod, si:si, pr:prem, exp:exp, endo:0, issuing:0, line:lineId});
       var oppId='OPP-'+lineId.slice(3);
-      var l=L(lineId, oppId, acc, prod, owner, 14, {idle:0, att:3, prem:prem, picked:ins, ins:ins, pay:'paid', si:si, createdAt:ago(paidAgo+20), enteredAt:ago(Math.max(1,paidAgo-6))});
+      var l=L(lineId, oppId, acc, prod, owner, 15, {idle:0, att:3, prem:prem, picked:ins, ins:ins, pay:'paid', si:si, createdAt:ago(paidAgo+20), enteredAt:ago(Math.max(1,paidAgo-6))});
       l.paidAt=ago(paidAgo); l.soldBy=soldBy; l.soldName=soldName; l.amt=prem;
       l.hand={note:'', by:soldBy, at:ago(paidAgo), utr:'', proof:'Payment screenshot', read:'matched'};
       l.iss={id:issId, owner:'radha', createdAt:ago(paidAgo), assignedAt:ago(paidAgo), stage:'closed', skip12:false,
@@ -214,12 +233,12 @@ function seed(){
    R({id:'TR-01',n:'Work the new lead',when:[[st(1),isOpen()]],ti:'Call the new lead',cl:'sla',du:4,duu:'h',ec:4,ecu:'h',recheck:'hourly',closeWhen:[[notSt(1)]],fd:128}),
    R({id:'TR-02',n:'Chase the RFQ',when:[[st(4),isOpen()]],ti:'Chase the RFQ with the client',cl:'sla',du:3,duu:'d',ec:2,ecu:'d',recheck:'daily',closeWhen:[[notSt(4)]],fd:34}),
    R({id:'TR-03',n:'Callback',when:[[C('disp','is','Asked to call back later'),isOpen()]],ti:'Call the client back',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',recheck:'off',closeWhen:[[C('disp','isnot','Asked to call back later')]],fd:61}),
-   R({id:'TR-04',n:'Chase the payment',when:[[st(10),isOpen()]],ti:'Payment details shared — still unpaid',cl:'sla',du:6,duu:'h',ec:6,ecu:'h',recheck:'hourly',closeWhen:[[notSt(10)]],fd:22}),
+   R({id:'TR-04',n:'Chase the payment',when:[[st(11),isOpen()]],ti:'Payment details shared — still unpaid',cl:'sla',du:6,duu:'h',ec:6,ecu:'h',recheck:'hourly',closeWhen:[[notSt(11)]],fd:22}),
    R({id:'TR-05',n:'Marine quote review',when:[[st(8)]],pf:['Marine Cargo'],ap:'grp',gp:'Marine group',ti:'Review the quote before it goes out',cl:'sla',du:1,duu:'d',ec:1,ecu:'d',recheck:'off',from:'2026-07-01',fd:9}),
    R({id:'TR-06',n:'Chase placement for quotes',when:[[st(6),isOpen()]],rt:'plc',ti:'Chase placement for quotes',cl:'sla',du:2,duu:'d',ec:2,ecu:'d',recheck:'daily',closeWhen:[[notSt(6)]],from:'2026-05-01',fd:0}),
    R({id:'TR-07',n:'Renewal consultation',when:[[st(2)]],ot:'ren',ti:'Set up the renewal consultation',cl:'fu',du:3,duu:'d',ec:0,ecu:'d',recheck:'off',sea:'renewal',act:0,fd:44}),
    /* RM clocks — [proposed] values, editable here */
-   R({id:'TR-09',n:'Chase the proposal form and mandate',when:[[st(12)]],ti:'Chase the proposal form and mandate',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',waitN:1,waitU:'d',recheck:'daily',repeat:true,max:3,closeWhen:[[notSt(12)]],from:'2026-09-21',fd:2}),
+   R({id:'TR-09',n:'Chase the proposal form and mandate',when:[[st(13)]],ti:'Chase the proposal form and mandate',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',waitN:1,waitU:'d',recheck:'daily',repeat:true,max:3,closeWhen:[[notSt(13)]],from:'2026-09-21',fd:2}),
    /* chains that only the condition model can express */
    R({id:'TR-11',n:'Follow-up call after no connect',when:[[st(2),C('disp','is','group:nc'),isOpen()]],waitN:4,waitU:'h',recheck:'hourly',ti:'Follow-up call',cl:'fu',du:4,duu:'h',ec:0,ecu:'h',repeat:true,max:0,closeWhen:[[C('disp','is','group:c')],[notSt(2)]],from:'2026-09-01',fd:17}),
    R({id:'TR-12',n:'Quote sent · follow-up',when:[[st(8),isOpen()]],waitN:1,waitU:'d',recheck:'daily',ti:'Quote sent follow-up',cl:'fu',du:1,duu:'d',ec:0,ecu:'d',repeat:true,max:0,closeWhen:[[notSt(8)]],from:'2026-09-01',fd:11}),

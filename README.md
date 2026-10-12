@@ -32,9 +32,11 @@ npm run shots                      # build, then 27 screenshots into shots/
 `npm test` drives the real page in a real browser. It signs in as each person,
 takes the Workmen's Compensation line through Cholamandalam's real-time
 issuance (and the assisted and provisional-account variants), takes the Cyber
-line through its band-chosen RFQ to placement, checks website-lead priority,
-walks every screen and tab for every person, and fails on any `FAIL` line or
-any browser console error. Without network access the Google Fonts request
+line through its band-chosen RFQ to placement, pays two opportunities on one
+request, holds an unverified account at KYC Details Requested until KYC clears,
+checks website-lead priority, the Won filter, the Admin console and masters,
+and the repo fixes, walks every screen and tab for every person, and fails on
+any `FAIL` line or any browser console error. Without network access the Google Fonts request
 fails and logs two console errors, so the run ends `ERRORS` and exits 1 even
 when nothing else is wrong — check for lines beginning `FAIL`. CI has network
 access, so it sees neither.
@@ -44,7 +46,7 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, twenty-five JS modules
+app/            the source — one stylesheet fragment, twenty-five JS modules, repo fixes
 build.mjs       concatenates app/ into public/index.html
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          smoke.js (assertions) and shots.js (screenshots)
@@ -79,6 +81,7 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `22-docs.js` | The document viewer — view and download, every document type |
 | `23-helpers.js` | Shared helpers — panel states, activity kinds, renewal and lead priority |
 | `99-boot.js` | Boot |
+| `repo-fixes.css`, `repo-fixes.js` | Fixes applied on top of the prototype — see *Repo fixes* below |
 
 ### Conventions
 
@@ -93,10 +96,27 @@ first — is the dependency order. Everything shares one scope — there are no 
 ### State
 
 Everything is remembered in the browser under `localStorage`, key
-`bksales.v16`. **Reset** in the sidebar returns to the seed. The clock is fixed
+`bksales.v20`. **Reset** in the sidebar returns to the seed. The clock is fixed
 at Mon 21 Sep 2026, 11:00 and only moves through *Prototype controls* or the
 rule simulator; when it moves, every scheduled rule check between then and the
 target runs.
+
+### Repo fixes
+
+`app/01-css.html` and the numbered modules are ported from the prototype artifact
+and kept identical to it. Bugs found while porting are fixed in two files a port
+never overwrites: `build.mjs` adds `app/repo-fixes.css` after the stylesheet and
+`app/repo-fixes.js` after the modules.
+
+- **Compliance buttons clipped** (v64 onward). Below about 1400px the PAN row's
+  verification line stretched Account 360 past the panel, hiding View and
+  Download. `repo-fixes.css` lets the line wrap.
+- **Admin could not open records** (v73). Admin's lists showed every account and
+  opportunity, but the access check had no Admin case. `repo-fixes.js` lets Admin
+  open any of them; every other role keeps the prototype's own check.
+
+After each port, check whether the prototype now carries a fix and delete it
+here if so. The smoke tests cover both.
 
 ---
 

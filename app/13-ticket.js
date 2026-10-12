@@ -92,9 +92,9 @@ function tkTrail(t){
 function tkSims(t){
   var l=t.line, b=[]; if(!canAct(l)||dead(l)) return '';
   if(t.ty==='Placement'&&l.stage===6&&(l.qAns||l.round>1)) b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"'));
-  if(t.ty==='Payment'&&l.stage===9&&l.pay==='ticket'){ b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"')); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
-  if(t.ty==='Payment'&&l.stage===10) b.push(simbtn('The link expired unpaid — Ops closes the ticket','data-sim="extExpire" data-line="'+l.id+'"'));
-  if(t.ty==='Payment'&&l.stage===10) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
+  if(t.ty==='Payment'&&l.stage===10&&l.pay==='ticket'){ b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"')); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
+  if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('The link expired unpaid — Ops closes the ticket','data-sim="extExpire" data-line="'+l.id+'"'));
+  if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   return b.length?simblock('Simulate the desk or the client','',b.join('')):'';
 }
 

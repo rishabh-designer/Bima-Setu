@@ -13,15 +13,16 @@ function oppRow(o){
   return '<div class="row" data-go="opp" data-id="'+o.id+'"><div class="bd"><b>'+esc(oName(o))+'</b> '+chip(st.tx,st.tone,true,true)+'<div class="m2">'+esc(o.id)+' · '+plural(ls.length,'product line')+' · '+esc(o.bt)+' · '+esc(o.src)+' · created '+esc(fmtD(o.created))+(conf?' · <span class="green">'+INR(conf)+' confirmed</span>':'')+'</div></div><div class="rt">'+ic('chevright')+'</div></div>';
 }
 /* payment requests on an opportunity — one per PAY reference, read off the lines */
-function oppPayReqs(o){ var m={}; linesOfOpp(o.id).forEach(function(l){ if(l.pay==='pre'||l.stage<9) return; var r=payRef(l); if(!m[r]) m[r]={ref:r,lines:[],amt:0,by:l.soldBy||l.owner,st:''}; m[r].lines.push(l); m[r].amt+=premOf(l); });
-  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Details returned':(l.pay==='shared'||l.stage===10?'Shared with client':'With Ops')); q.tone=q.st==='Paid'?'green':(q.st==='Details returned'?'amber':'violet'); return q; }); }
+function oppPayReqs(o){ var m={}; linesOfOpp(o.id).forEach(function(l){ if(l.pay==='pre'||l.stage<10) return; var r=payRef(l); if(!m[r]) m[r]={ref:r,lines:[],amt:0,by:l.soldBy||l.owner,st:''}; m[r].lines.push(l); m[r].amt+=premOf(l); });
+  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Details returned':(l.pay==='shared'||l.stage===11?'Shared with client':'With Ops')); q.tone=q.st==='Paid'?'green':(q.st==='Details returned'?'amber':'violet'); return q; }); }
 SCREENS.opp=function(){
   var o=by(S.data.opps,S.route.id); if(!o) return SCREENS.notfound();
+  { var _l=linesOfOpp(o.id)[0]; if(_l){ S.route={v:'line',id:_l.id}; return SCREENS.line(); } }
   var a=acctOf(o.acct), u=me(); if(!canSeeAcct(a,u)) return noAccess('opportunity');
   var ls=linesOfOpp(o.id).sort(function(x,y){ return (dead(x)?1:0)-(dead(y)?1:0)||y.stage-x.stage; }), st=oppStatus(o);
   var conf=ls.filter(confirmed).reduce(function(s,l){return s+premOf(l);},0), est=ls.filter(function(l){return (openLine(l)||l.status==='park')&&!confirmed(l)&&premOf(l);}).reduce(function(s,l){return s+premOf(l);},0);
   var mineOn=ls.some(function(l){return l.owner===u.id;});
-  var elig=ls.filter(function(l){return l.stage===9&&l.status==='open'&&l.pay==='pre';}), myElig=elig.filter(function(l){return l.owner===u.id;}), others=elig.filter(function(l){return l.owner!==u.id;});
+  var elig=ls.filter(function(l){return l.stage===10&&l.status==='open'&&l.pay==='pre';}), myElig=elig.filter(function(l){return l.owner===u.id;}), others=elig.filter(function(l){return l.owner!==u.id;});
   var reqs=oppPayReqs(o), prov=a.prov;
   var payWhy=prov?'The account is not KYC verified — PAN and GST are needed first.':(!myElig.length?(others.length?'None of the lines at Purchase Requested are yours.':'No line of yours is at Purchase Requested yet.'):'');
   var otherNames=others.map(function(l){return uname(l.owner);}).filter(function(v,i,arr){return arr.indexOf(v)===i;});
@@ -96,6 +97,6 @@ SCREENS.opps=function(){
         var sum=ls.length?open.map(function(l){return esc(l.product.split(' ')[0].replace(/’s$/,''))+' — '+esc(STAGES[l.stage-1].t);}).slice(0,4).join(', ')+(open.length>4?', +'+(open.length-4)+' more':'')+(won.length?(open.length?', ':'')+won.length+' won':''):'<span class="meta">no lines yet</span>';
         return '<tr class="row'+(s.tx==='Closed'?' dim':'')+'" data-go="opp" data-id="'+o.id+'"><td class="nm one" style="max-width:250px" title="'+esc(oName(o))+'">'+esc(oName(o))+'<div class="sub">'+esc(o.id)+' · '+esc(o.src)+'</div></td><td>'+chip(s.tx,s.tone,true,true)+'</td><td class="one" title="'+esc(a?a.n:o.acct)+'">'+esc(a?shortName(a.n):o.acct)+(a&&a.prov?'<div class="sub">provisional</div>':'')+'</td><td style="white-space:nowrap">'+esc(o.type)+'<div class="sub">'+esc(o.bt)+'</div></td><td><b>'+ls.length+'</b></td><td class="num">'+(conf?'<b class="b">'+INR(conf)+'</b>':'<span class="meta">—</span>')+'</td><td style="white-space:nowrap">'+esc(fmtD(o.created))+'<div class="sub">'+esc(o.by==='system'?'inbound':uname(o.by))+'</div></td></tr>'; }).join('')+'</tbody></table></div>'
       : empty('handshake', q?'No opportunity matches':'No opportunities here', q?'Try the account name or the opportunity ID.':(f==='mine'?'You get one when you create it, or when a line on it is yours.':'Opportunities arrive from inbound enquiries or New opportunity.'), q?'<button class="btn" data-clearof="1">Clear</button>':''))+'</div>';
-  return {sc:'Opportunities', html:html};
+  html+=paySelBar(); return {sc:'Opportunities', html:html};
 };
 HANDLERS.push(function(t){ if(t.closest('[data-clearof]')){ S.ui.oq=''; paint(); return true; } return false; });

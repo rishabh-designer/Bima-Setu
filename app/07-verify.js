@@ -77,13 +77,14 @@ FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read
     var nm=(S.sel.ocrname||'').trim(), was=a.n, dup=r==='gst'?S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.gst&&x.gst.toUpperCase()===gst;})[0]:
       S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.pan===pan&&x.aad&&x.aad.replace(/\s/g,'').slice(-4)===aad.replace(/\s/g,'').slice(-4);})[0];
     var ok=write(function(){
-      if(dup){ mergeAccount(a,dup,r); return; }
+      if(dup){ mergeAccount(a,dup,r); if(!dup.prov) linesOfAcct(dup.id).forEach(function(x){ if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified on merge — payment can be requested'); }); return; }
       a.pan=pan; if(gst) a.gst=gst; if(aad) a.aad=aad; a.prov=0; a.kycBy=S.user; a.kycAt=S.now; a.kycHow=r==='gst'?'PAN card and GST certificate uploaded · PAN matched the PAN inside the GSTIN':'PAN card and Aadhaar uploaded · proprietorship, no GST';
       a.kycDocs={pan:S.sel.panname||'PAN card',doc:S.sel.docname||kycSecondName()};
       if(nm&&nm!==a.n){ a.nWas=was; a.n=nm; acctLog(a,'Renamed on verification: '+was+' → '+nm,'System · read by OCR from the PAN card'); }
       acctLog(a,'KYC verified','System · '+a.kycHow+' · uploaded by '+uname(S.user));
       linesOfAcct(a.id).forEach(function(x){
         logAdd(x,'KYC verified','System · '+(r==='gst'?'PAN matched the PAN inside the GSTIN':'PAN and Aadhaar read — proprietorship, no GST')+' · uploaded by '+uname(S.user),'sys',1);
+        if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified — payment can be requested');
       });
     },'the verification');
     if(!ok) return 'fail';
@@ -128,24 +129,46 @@ HANDLERS.push(function(t){
 
 /* [stated 23 Sep] one request can cover several lines. For fresh business that is the opportunity's
    lines; a renewal has no opportunity, so it is the account's other renewal lines. */
-function payGroup(l){ return isRen(l)?renLinesOfAcct(l.acct):linesOfOpp(l.opp); }
+function payGroup(l){ return linesOfAcct(l.acct).filter(function(x){ return (isRen(x)?1:0)===(isRen(l)?1:0) && x.owner===l.owner; }); }
 /* [stated 26 Sep · 9.1] from the line: this line only, with Combine with other lines as the way to add more.
    From the opportunity: the selector. Other owners' lines and lines already on a request are named, not selectable.
    No default payment mode. */
-function payRows(l){ var gp=payGroup(l).filter(function(x){ return (x.stage===9||(x.stage===10&&x.pay==='pre'))&&x.status==='open'; });
+function payRows(l){ var gp=payGroup(l).filter(function(x){ return (x.stage===10||(x.stage===11&&x.pay==='pre'))&&x.status==='open'; });
   return gp.map(function(x){ var why=x.pay!=='pre'?'already on '+payRef(x):(x.owner!==S.user?uname(x.owner)+'’s line — requested separately':''); return {l:x,why:why,warn:daysInStage(x)>=QUOTE_VALID?'The confirmed quote may have expired — check it with the insurer first':''}; }); }
-FLOWS.pay={t:'Raise payment request', sub:function(){ var l=FL(); return 'One request can cover several of your lines at Purchase Requested — the client pays one amount.'; },
+/* [12 Oct · Note 41 UI-7.01] Multiple-payment mode */
+function payElig(l,u){ u=u||me(); return !!u&&!!l&&l.owner===u.id&&l.stage===10&&l.status==='open'&&l.pay==='pre'&&!acctOf(l).prov; }
+function payAcctGroups(lines,u){ u=u||me(); var m={}; (lines||[]).forEach(function(l){ if(payElig(l,u)){ var k=l.acct+'|'+(isRen(l)?'r':'f'); (m[k]=m[k]||[]).push(l); } }); return m; }
+function hasMultiPay(lines,u){ var m=payAcctGroups(lines,u); return Object.keys(m).some(function(k){ return m[k].length>=2; }); }
+function paySel(){ return (S.ui.paysel||[]).filter(function(id){ return payElig(lineById(id)); }); }
+function payAnchor(){ var ids=paySel(); if(!ids.length) return null; var l=lineById(ids[0]); return l?{acct:l.acct,ren:isRen(l)}:null; }
+function payCompatible(l){ var a=payAnchor(); return !a||(l.acct===a.acct&&isRen(l)===a.ren); }
+function paySelTotal(){ return paySel().reduce(function(s,id){ var l=lineById(id); return s+(l?premOf(l):0); },0); }
+function payBtn(lines,u){ u=u||me(); if(S.ui.paymode) return ''; var able=hasMultiPay(lines,u);
+  return '<button class="btn sm'+(able?' primary':'')+'" data-paymode="1"'+(able?'':' disabled title="Enable needs 2+ opportunities on one account \u2014 yours, verified, at Purchase Requested, and not yet on a payment request"')+'>'+ic('wallet')+'Multiple payment</button>'; }
+function payChk(l,u){ if(!S.ui.paymode) return '<span style="display:inline-block;width:20px"></span>'; u=u||me();
+  if(!payElig(l,u)) return '<span style="display:inline-block;width:20px"></span>';
+  var on=paySel().indexOf(l.id)>=0, able=on||payCompatible(l);
+  return '<button data-paysel="'+l.id+'"'+(able?'':' disabled')+' title="'+(able?'':'A different account is already selected')+'" style="width:20px;height:20px;padding:0;border-radius:5px;border:1.5px solid '+(on?'var(--violet,#4318D4)':'var(--border,#D6DAE4)')+';background:'+(on?'var(--violet,#4318D4)':'#fff')+';display:inline-flex;align-items:center;justify-content:center;cursor:'+(able?'pointer':'not-allowed')+';opacity:'+(able?'1':'.45')+'">'+(on?'<span style="color:#fff;line-height:1">'+ic('check','ic14')+'</span>':'')+'</button>'; }
+function paySelBar(){ if(!S.ui.paymode) return ''; var ids=paySel(), tot=paySelTotal();
+  return '<div style="position:sticky;bottom:12px;z-index:5;margin-top:14px;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--violet,#4318D4);border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(67,24,212,.16)"><div style="flex:1">'+(ids.length?'<b>'+plural(ids.length,'opportunity').replace('opportunitys','opportunities')+' selected</b> \u00b7 '+INR(tot)+'<span class="meta"> \u00b7 same account \u00b7 same owner \u00b7 Purchase Requested</span>':'<b>Multiple payment</b><span class="meta"> \u00b7 tick the opportunities to pay together \u2014 the first one fixes the account</span>')+'</div><button class="btn sm ghost" data-paycancel="1">Cancel</button><button class="btn sm primary" data-payraise="1"'+(ids.length?'':' disabled')+'>'+ic('wallet')+'Raise payment request</button></div>'; }
+HANDLERS.push(function(t){
+  if(t.closest('[data-paymode]')){ S.ui.paymode=true; S.ui.paysel=[]; paint(); return true; }
+  if(t.closest('[data-paycancel]')){ S.ui.paymode=false; S.ui.paysel=[]; paint(); return true; }
+  var x=t.closest('[data-paysel]'); if(x){ if(x.disabled) return true; var id=x.dataset.paysel, cur=(S.ui.paysel||[]).slice(), i=cur.indexOf(id); if(i>=0) cur.splice(i,1); else cur.push(id); S.ui.paysel=cur; paint(); return true; }
+  if(t.closest('[data-payraise]')){ var ids=paySel(); if(ids.length){ var sv=ids.slice(); S.ui.paymode=false; S.ui.paysel=[]; openFlow('pay',{line:sv[0],comb:'1',l:sv}); } return true; }
+  return false; });
+FLOWS.pay={t:'Raise payment request', sub:function(){ var l=FL(); return 'One request can cover several of your opportunities on this account at Purchase Requested — the client pays one amount.'; },
   repaintOn:['mode'],
   body:function(){ var l=FL(), a=acctOf(l), rows=payRows(l), mine=rows.filter(function(r){return !r.why;});
     if(!S.sel.l) S.sel.l=S.sel.comb?mine.map(function(r){return r.l.id;}):[l.id];
     var sel=mine.filter(function(r){return S.sel.l.indexOf(r.l.id)>=0;}), tot=sel.reduce(function(s,r){return s+premOf(r.l);},0), h='';
     h+=a.prov?note('red','The account is not KYC verified','PAN and GST are needed before a payment request. <button class="btn sm" data-flow="kyc" data-line="'+l.id+'">Get verified</button>','lock'):'';
     if(!S.sel.comb){ var r0=rows.filter(function(r){return r.l.id===l.id;})[0]||{l:l};
-      h+='<div class="kvgrid two">'+kv('Product line',esc(l.product)+' · '+esc(l.picked||l.ins||'—'))+kv('Amount','<b style="font-size:var(--fs-xl)">'+INR(premOf(l))+'</b>')+'</div>'+(r0.warn?note('amber','',esc(r0.warn),'alert'):'')+
-        (mine.length>1?'<button type="button" class="btn sm mt8" data-pcomb="1">'+ic('plus')+'Combine with other lines</button>':'');
+      h+='<div class="kvgrid two">'+kv('Opportunity',esc(l.product)+' · '+esc(l.picked||l.ins||'—'))+kv('Amount','<b style="font-size:var(--fs-xl)">'+INR(premOf(l))+'</b>')+'</div>'+(r0.warn?note('amber','',esc(r0.warn),'alert'):'')+
+        (mine.length>1?'<button type="button" class="btn sm mt8" data-pcomb="1">'+ic('plus')+'Combine with other opportunities</button>':'');
     } else {
       h+=rows.map(function(r){ return opt('data-tog="l" data-tv="'+r.l.id+'"',!r.why&&S.sel.l.indexOf(r.l.id)>=0,r.l.product,(r.why?esc(r.why):esc(r.l.picked||r.l.ins||'—')+' · '+r.l.id)+(r.warn&&!r.why?' · <span class="amber">'+esc(r.warn)+'</span>':''),INR(premOf(r.l)),true,!!r.why); }).join('')+
-        '<div class="flex" style="justify-content:space-between;border-top:1px solid var(--border);padding-top:10px"><span class="meta">'+plural(sel.length,'line')+' selected</span><b style="font-size:var(--fs-xl)">'+INR(tot)+'</b></div>';
+        '<div class="flex" style="justify-content:space-between;border-top:1px solid var(--border);padding-top:10px"><span class="meta">'+plural(sel.length,'opportunity').replace('opportunitys','opportunities')+' selected</span><b style="font-size:var(--fs-xl)">'+INR(tot)+'</b></div>';
     }
     h+='<div class="fgrid">'+field('Business name','<input class="inp" value="'+esc(a.n)+'" disabled>','As on the PAN — the insurer’s receipt carries it.')+field('Payment mode',select('mode',S.sel.mode||'',[['','Choose how the customer will pay']].concat(PAYMODE)))+'</div>'+
       '<div class="fgrid">'+field('PAN card','<input class="inp" value="PAN_'+esc(shortName(a.n).replace(/\s+/g,''))+'.pdf" disabled>')+field('GST certificate','<input class="inp" value="GST_'+esc(a.gst||'')+'.pdf" disabled>')+'</div>';
@@ -174,7 +197,7 @@ FLOWS.deskMail={t:'Write to the desk', sub:'On the RM ↔ desk thread of the pos
 FLOWS.status={t:'Change status', sub:'Status sits beside the stage. Time Pending keeps the position; closing preserves how far it got.',
   body:function(){ var l=FL(), canLose=reachedOnce(l), d=S.sel.d; var minD=ymd(S.now);
     var ops=[['park','Time Pending','Alive, deliberately parked. Keeps its stage. Needs a revisit date and a reason'],['lost','Lost','The client did not buy from us. Needs a loss reason'+(canLose?'':' · available once a call has connected')],['noapp','No Appetite','We could not place it. A supply failure, not a competitive loss'],['disq','Disqualified','Should never have been in the pipeline. Needs a reason']];
-    if(l.stage<=10) ops.push(['withdrawn','Withdrawn','The client pulled out before paying. Say why in their words']);
+    if(l.stage<=11) ops.push(['withdrawn','Withdrawn','The client pulled out before paying. Say why in their words']);
     return ops.map(function(x){ return opt('data-pick="'+x[0]+'"',d===x[0],x[1],x[2],'',false,x[0]==='lost'&&!canLose); }).join('')+
       (d==='park'?'<div class="fgrid">'+field('Revisit on','<input class="inp" id="f_rv" data-f="rv" type="date" min="'+minD+'" value="'+esc(S.sel.rv||'')+'">','',S.sel.rv&&S.sel.rv<minD?'Cannot be in the past.':'')+field('Reason',select('rs',S.sel.rs||'',[['','Choose a reason']].concat(PARK)))+'</div>':'')+
       (d==='lost'?field('Loss reason',select('rs',S.sel.rs||'',[['','Choose a reason']].concat(LOSS))):'')+

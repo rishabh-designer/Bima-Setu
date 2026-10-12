@@ -1,9 +1,10 @@
 const { chromium } = require('playwright');
 /*
- * Smoke tests for the v64 prototype. Drives the built page in a real browser:
- * every person, every screen and tab, and the flows v48–v64 added or changed
- * (docs/changelog-v48-v64.md). The seed is reset between scenarios, so each one
- * starts from the same records.
+ * Smoke tests for the v73 prototype. Drives the built page in a real browser:
+ * every person, every screen and tab, and the flows v48–v73 added or changed
+ * (docs/changelog-v48-v64.md, docs/changelog-v64-v73.md), plus the repo fixes in
+ * app/repo-fixes.*. The seed is reset between scenarios, so each one starts from
+ * the same records. Stage numbers follow the v73 spine (15 stages).
  */
 (async () => {
   const browser = await chromium.launch();
@@ -29,9 +30,9 @@ const { chromium } = require('playwright');
   const reseed = async () => { await click('[data-reset]'); await page.waitForTimeout(150); };
   const CHOLA = 'Cholamandalam MS General Insurance';
 
-  // ---- sign-in: four people, Rohan gone [v64] ----
+  // ---- sign-in: five people — Admin joins [v65], Rohan gone [v64] ----
   const personas = await page.$$eval('[data-signin]', e => e.map(x => x.dataset.signin).join(','));
-  if (personas !== 'nikhil,vikram,priya,meera') fail('sign-in should offer nikhil,vikram,priya,meera, got ' + personas);
+  if (personas !== 'nikhil,vikram,priya,meera,admin') fail('sign-in should offer nikhil,vikram,priya,meera,admin, got ' + personas);
   await expectNot('Rohan', 'sign-in');
   await click('[data-signin="nikhil"]');
   await expect('Good morning', 'home');
@@ -53,7 +54,7 @@ const { chromium } = require('playwright');
   log('priority ok');
 
   // ---- nav ----
-  for (const v of ['pipeline', 'opps', 'accounts', 'tasks', 'tickets', 'home']) await click(`[data-nav="${v}"]`);
+  for (const v of ['pipeline', 'accounts', 'tasks', 'tickets', 'home']) await click(`[data-nav="${v}"]`);   // one Opportunities list (pipeline) since v67
   log('nav ok');
 
   // ---- line screen: no Requirement tab, requirement inline in Overview [v54] ----
@@ -100,7 +101,7 @@ const { chromium } = require('playwright');
   await click('[data-flow="confirm"]');
   await expect('instant issuance — no payment ticket', 'confirm shows the instant route');
   await click(`[data-pick="${CHOLA}"]`); await click('[data-commit]');
-  await expectStage('OP-2001', 9, 'Chola confirmed');
+  await expectStage('OP-2001', 10, 'Chola confirmed — bypasses KYC Details Requested [v73]');
   await expect('Run real-time KYC with Cholamandalam', 'stage 9 next action');
   await click('[data-uv="overview"]');
   await expect('Sold', 'Sold block in Overview [v54]');
@@ -118,7 +119,7 @@ const { chromium } = require('playwright');
   if (!(await page.$('#ovl [data-copy]'))) fail('payment link should offer Copy link [v53]');
   if (!(await page.$eval('#ovl', o => [...o.querySelectorAll('input')].some(i => i.value.startsWith('https://pay.cholamsgeneral.com/wc/'))))) fail('payment link should be a Chola link');
   await click('[data-commit]');
-  await expectStage('OP-2001', 10, 'link sent');
+  await expectStage('OP-2001', 11, 'link sent');
   await expect('expires in 24h', 'link valid 24h');
   // the link lapses after 24 hours and is regenerated [v51, v53]
   await click('[data-sim="cholaExpire"]');
@@ -129,22 +130,22 @@ const { chromium } = require('playwright');
   await expectNot('The payment link expired', 'regenerated link');
   await expect('expires in 24h', 'regenerated link is valid for 24h');
   await click('[data-sim="cholaPaid"]');
-  await expectStage('OP-2001', 11, 'client paid');
+  await expectStage('OP-2001', 12, 'client paid');
   await expectNot('Welcome call', 'no welcome call at Payment Completed [v55]');
   const owner = await page.evaluate(() => lineById('OP-2001').owner);
   if (owner !== 'priya') fail('a paid Chola line should hand over to the RM, got ' + owner);
   const tix = await page.evaluate(() => ticketsOf(lineById('OP-2001')).length);
   if (tix) fail('a Chola line should derive no ticket of any kind, got ' + tix);
   const track = await page.$eval('.track', e => e.innerText);
-  if (/Docs Pending|Awaiting Policy Copy/.test(track)) fail('stages 12–13 should be hidden on a Chola line: ' + track.replace(/\s+/g, ' '));
+  if (/Docs Pending|Awaiting (Policy )?Copy/.test(track)) fail('Docs Pending and Awaiting Copy should be hidden on a Chola line: ' + track.replace(/\s+/g, ' '));
   // Switch person goes straight to the full selector, data kept [v60]
   await click('[data-switch]');
   if ((await page.evaluate(() => S.route.v)) !== 'signin') fail('Switch person should open the full person selector');
   await click('[data-signin="priya"]');
   await openLine('OP-2001');
-  await expectStage('OP-2001', 11, 'data kept across a switch');
+  await expectStage('OP-2001', 12, 'data kept across a switch');
   await click('[data-flow="cholaShare"]'); await click('[data-commit]');
-  await expectStage('OP-2001', 14, 'policy copy shared');
+  await expectStage('OP-2001', 15, 'policy copy shared');
   await expect('Policy copy shared · issued in real time via Cholamandalam', 'issued');
   await expectNot('Policy explanation', 'no policy-explanation call [v55]');
   // Documents replaces RFQ & quotes once issued [v54]
@@ -158,7 +159,7 @@ const { chromium } = require('playwright');
   await wcToQuotes(false);
   await click('[data-flow="qcr"]'); await click('[data-commit]');
   await click('[data-flow="confirm"]'); await click('[data-pick="ICICI Lombard"]'); await click('[data-commit]');
-  await expectStage('OP-2001', 9, 'ICICI confirmed');
+  await expectStage('OP-2001', 10, 'ICICI confirmed — verified account goes straight to Purchase Requested [v73]');
   if (await page.$('[data-flow="cholaKyc"]')) fail('a non-Chola insurer should not offer the Chola KYC');
   if (!(await page.$('[data-flow="pay"]'))) fail('a non-Chola insurer should raise a payment request');
   log('wc assisted route ok');
@@ -214,6 +215,106 @@ const { chromium } = require('playwright');
   await expect('Placement has a query for you', 'simulated query');
   if (!(await page.$('[data-flow="answerQ"]'))) fail('Answer the query should appear once placement raises a query');
   log('cyber rfq + placement query ok');
+
+  // ---- one product per opportunity: the container screen redirects [v67] ----
+  await page.evaluate(() => go('opp', { id: 'OPP-001001' })); await page.waitForTimeout(80);
+  const oppRoute = await page.evaluate(() => S.route);
+  if (oppRoute.v !== 'line' || oppRoute.id !== 'OP-2001') fail('the opportunity container should redirect to its product, got ' + JSON.stringify(oppRoute));
+  await expectNot('Add product line', 'a second product is a new opportunity');
+  log('one product per opportunity ok');
+
+  // ---- the seller keeps sight of what they sold: the Won filter [v72] ----
+  await reseed();
+  await click('[data-nav="pipeline"]');
+  await click('[data-pill="pf"][data-pv="won"]');
+  const won0 = await page.$$eval('.content .row[data-go="line"]', r => r.map(x => x.dataset.id).sort().join(','));
+  if (won0 !== 'OP-2101,OP-2103') fail('Won should list the opportunities Nikhil sold, got ' + won0);
+  log('won filter ok');
+
+  // ---- Multiple payment: one request and one ticket for several opportunities [v68–v69] ----
+  await click('[data-pill="pf"][data-pv="open"]');
+  await click('[data-paymode="1"]');
+  if (!(await page.$eval('[data-payraise]', b => b.disabled))) fail('raising should wait for a selection');
+  await click('[data-paysel="OP-2004"]');
+  const greyed = await page.$$eval('[data-paysel]', e => e.filter(x => x.disabled).map(x => x.dataset.paysel).sort().join(','));
+  if (greyed !== 'OP-2006,OP-2007') fail('the first pick should grey out the other account, got ' + greyed);
+  await click('[data-paysel="OP-2005"]'); await click('[data-payraise]');
+  await expect('2 opportunities selected', 'one request covers both');
+  await pick('#f_mode', 'NEFT / RTGS'); await click('[data-commit]');
+  const pays = await page.evaluate(() => ['OP-2004', 'OP-2005'].map(id => ticketsOf(lineById(id)).filter(t => /^PAY-/.test(t.id)).map(t => t.id).join('/')));
+  if (!pays[0] || pays[0] !== pays[1]) fail('both opportunities should sit on one payment ticket: ' + pays.join(' vs '));
+  await openLine('OP-2004');
+  await click('[data-sim="extOps"]'); await click('[data-flow="share"]'); await click('[data-commit]');
+  for (const id of ['OP-2004', 'OP-2005']) await expectStage(id, 11, 'details shared once for both');
+  await click('[data-sim="extPaid"]'); await click('[data-flow="proof"]'); await click('[data-proofsample]'); await page.waitForTimeout(1200); await click('[data-commit]');
+  for (const id of ['OP-2004', 'OP-2005']) await expectStage(id, 12, 'one proof completes each opportunity');
+  await expect('Won', 'Won is derived from Payment Completed [v71]');
+  if (!/opportunity/i.test(await page.$eval('.topbar', e => e.innerText))) fail('the workspace top bar should read Opportunity [v71]');
+  log('multiple payment + won ok');
+
+  // ---- KYC Details Requested: an unverified account waits at stage 9 [v73] ----
+  const propToConfirm = async (id) => {
+    await openLine(id);
+    await click('[data-flow="call"]'); await click('[data-pick="ring"]'); await click('[data-commit]');
+    await click('[data-flow="disc"]');
+    await pick('#f_tob', 'Trading'); await pick('#f_noc', 'Private limited'); await fill('#f_to', '₹10 Cr'); await fill('#f_si', '₹2 Cr');
+    await fill('#f_occ', 'Warehouse'); await pick('#f_clm', 'No claims in 3 years'); await pick('#f_ten', '1 year');
+    await click('[data-mset="pol"][data-mval="n"]'); await click('[data-commit]');
+    await click('[data-flow="qcr"]'); await click('[data-commit]');
+    await expectStage(id, 8, 'QCR sent');
+    await click('[data-flow="confirm"]'); await click('#ovl [data-pick]'); await click('[data-commit]');
+  };
+  await reseed();
+  // a second opportunity on the same unverified account, created from Account 360 [v67]
+  await page.evaluate(() => go('acct', { id: 'A-1201' })); await page.waitForTimeout(80);
+  await click('.content [data-flow="newOpp"][data-acct="A-1201"]');
+  await expect('On the selected account', 'New opportunity from Account 360 binds the account');
+  await pick('#f_product', 'Fire & Special Perils'); await pick('#f_src', 'Referral'); await click('[data-mset="bt"][data-mval="fresh"]');
+  await click('[data-commit]'); await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  const fireId = await page.evaluate(() => (S.data.lines.find(l => l.acct === 'A-1201' && l.product === 'Fire & Special Perils') || {}).id);
+  if (!fireId) fail('New opportunity from Account 360 should add an opportunity on A-1201');
+  for (const id of ['OP-2130', fireId]) { await propToConfirm(id); await expectStage(id, 9, 'an unverified account confirms into KYC Details Requested'); }
+  await expect('KYC Details Requested', 'stage 9 next action');
+  if (await page.$('[data-flow="pay"]')) fail('no payment request before KYC');
+  if (!(await page.$eval('.track', e => e.innerText)).includes('KYC Requested')) fail('an unverified track should show KYC Requested');
+  await click('[data-flow="kyc"]'); await click('#ovl [data-kycsample]'); await page.waitForTimeout(1200);
+  await click('[data-commit]'); await page.waitForTimeout(300);   // read the documents
+  await click('[data-commit]'); await page.waitForTimeout(300);   // confirm the name on the PAN
+  if (await page.evaluate(() => acctOf(lineById('OP-2130')).prov)) fail('KYC should verify the account');
+  for (const id of ['OP-2130', fireId]) await expectStage(id, 10, 'KYC clearing advances every waiting opportunity on the account');
+  await openLine('OP-2005');
+  if ((await page.$eval('.track', e => e.innerText)).includes('KYC Requested')) fail('a verified account’s track should hide stage 9');
+  log('kyc details requested ok');
+
+  // ---- Admin: console, masters, RM allocation, acts directly [v65–v66] ----
+  await reseed();
+  await signIn('admin');
+  for (const s of ['Admin console', 'Everything, across every team', 'Master configuration']) await expect(s, 'admin console');
+  await click('[data-nav="masters"]');
+  for (const s of ['Task configurator', 'Lead assignment', 'Lead prioritisation', 'RM allocation', 'Working calendar', 'Reference lists']) await expect(s, 'masters hub');
+  await click('[data-nav="rmalloc"]');
+  await expect('leaves 13 designation × region cells empty', 'RM allocation flags the uncovered cells');
+  // repo fix (app/repo-fixes.js): Admin opens any account or opportunity, including a renewal
+  for (const [v, id] of [['line', 'OP-2001'], ['acct', 'A-1102'], ['line', 'OP-2950']]) {
+    await page.evaluate(([v, id]) => go(v, { id }), [v, id]); await page.waitForTimeout(80);
+    await expectNot('have access', 'Admin opens ' + id);
+  }
+  await openLine('OP-2001');
+  await click('[data-flow="call"]'); await click('[data-pick="ring"]'); await click('[data-commit]');
+  await expectStage('OP-2001', 2, 'Admin acts directly, with no take-ownership step');
+  if (!(await page.evaluate(() => lineById('OP-2001').log.slice(0, 3).some(e => /Aditya Verma/.test((e.t || '') + ' ' + (e.m || '')))))) fail('the trail should name Admin as the actor');
+  await signIn('nikhil');
+  await page.evaluate(() => go('acct', { id: 'A-1102' })); await page.waitForTimeout(80);
+  await expect('have access', 'other roles keep their own scope');
+  log('admin ok');
+
+  // ---- repo fix (app/repo-fixes.css): Compliance buttons stay inside the panel at 1280px ----
+  await signIn('priya');
+  await page.evaluate(() => { S.ui['atab_A-1101'] = 'comp'; go('acct', { id: 'A-1101' }); }); await page.waitForTimeout(100);
+  const clipped = await page.evaluate(() => { const pr = document.querySelector('.panel').getBoundingClientRect().right; return [...document.querySelectorAll('.content [data-doc]')].filter(b => b.offsetParent && b.getBoundingClientRect().right > pr).length; });
+  if (clipped) fail(clipped + ' Compliance document buttons are clipped at 1280px');
+  await signIn('nikhil');
+  log('compliance layout ok');
 
   // ---- accounts, new opportunity, inbound, tasks ----
   await reseed();
@@ -273,14 +374,18 @@ const { chromium } = require('playwright');
 
   // ---- every person, every screen, every tab of the first record ----
   let visits = 0;
-  for (const who of ['nikhil', 'vikram', 'priya', 'meera']) {
+  for (const who of ['nikhil', 'vikram', 'priya', 'meera', 'admin']) {
     await signIn(who);
-    const navs = await page.$$eval('[data-nav]', e => [...new Set(e.map(x => x.dataset.nav))]);
+    const navs = await page.$$eval('.side [data-nav]', e => [...new Set(e.map(x => x.dataset.nav))]);
     for (const v of navs) {
-      await click(`[data-nav="${v}"]`); visits++;
+      await click(`.side [data-nav="${v}"]`); visits++;
+      if (v === 'masters') for (const m of await page.$$eval('.content [data-nav]', e => [...new Set(e.map(x => x.dataset.nav))])) {
+        await click(`.side [data-nav="masters"]`); await click(`.content [data-nav="${m}"]`); visits++;   // the masters' own screens
+      }
       const row = await page.$('.content .row[data-go]');
       if (!row) continue;
       await row.click(); await page.waitForTimeout(80); visits++;
+      if (await has('have access')) fail(`${who}: a row on ${v} opens to a no-access page`);
       for (const t of await page.$$eval('[data-uv]', e => e.map(x => [x.dataset.uv, x.dataset.uiset || '']))) {
         const sel = `[data-uv="${t[0]}"]` + (t[1] ? `[data-uiset="${t[1]}"]` : '');
         const el = await page.$(sel); if (el && await el.isVisible()) { await el.click(); await page.waitForTimeout(30); visits++; }
@@ -300,7 +405,7 @@ const { chromium } = require('playwright');
   const sw = await page.evaluate(() => document.documentElement.scrollWidth);
   if (sw > 402) fail('horizontal overflow on a line at 400px: ' + sw);
   await page.reload(); await page.waitForTimeout(300);
-  await expect('Meera', 'persisted user');
+  await expect('Aditya', 'persisted user');
   await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(100);
   await reseed();
   if ((await stage('OP-2001')) !== 1) fail('reset should return OP-2001 to New Lead');

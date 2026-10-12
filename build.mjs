@@ -11,7 +11,7 @@
  *
  * Vercel runs this on every push; see vercel.json.
  */
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,11 +21,19 @@ const outDir = join(root, 'public');
 
 const head = readFileSync(join(appDir, '01-css.html'), 'utf8');
 
+// Fixes applied on top of the prototype artifact (app/repo-fixes.css and
+// app/repo-fixes.js), kept apart from the ported files so that porting a new
+// artifact version does not overwrite them.
+const readIf = (f) => (existsSync(join(appDir, f)) ? readFileSync(join(appDir, f), 'utf8') : '');
+const fixCss = readIf('repo-fixes.css');
+const fixes = fixCss ? `<style>\n${fixCss}</style>\n` : '';
+const fixJs = readIf('repo-fixes.js');
+
 const modules = readdirSync(appDir)
   .filter((f) => /^\d\d-.*\.js$/.test(f))
   .sort();
 
-const js = modules.map((f) => readFileSync(join(appDir, f), 'utf8')).join('\n');
+const js = modules.map((f) => readFileSync(join(appDir, f), 'utf8')).join('\n') + (fixJs ? '\n' + fixJs : '');
 
 // A stray closing script tag inside a module would end the page's script block
 // early and break everything below it, silently. Fail the build instead.
@@ -41,7 +49,7 @@ const page = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="BimaSetu CRM — a clickable prototype of the BimaKavach sales and relationship-management interface. Every record in it is synthetic.">
 <meta name="robots" content="noindex, nofollow">
-${head}
+${head}${fixes}
 </head>
 <body>
 <div id="app"></div>
@@ -58,4 +66,4 @@ mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'index.html'), page, 'utf8');
 
 const kb = Math.round(Buffer.byteLength(page) / 1024);
-console.log(`built public/index.html — ${modules.length} modules, ${kb} KB, ${page.split('\n').length} lines`);
+console.log(`built public/index.html — ${modules.length} modules${fixCss || fixJs ? ' + repo fixes' : ''}, ${kb} KB, ${page.split('\n').length} lines`);

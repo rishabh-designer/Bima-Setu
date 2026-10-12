@@ -210,7 +210,7 @@ function fired30(r){ var since=S.now-30*86400000; var n=S.data.tasks.filter(func
 
 /* ---------- R1 · the list ---------- */
 SCREENS.rules=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var rs=S.data.rules; S.ui.rb=null; S.ui.rb_id=''; S.ui.rb_touch=0;
   var sk=S.ui.rsort||'fd', dir=S.ui.rdir||'desc', appl=function(r){ return S.data.lines.filter(function(l){ return !dead(l)&&ruleFilters(r,l); }).length; };
   var sorted=rs.slice().sort(function(a,b){ var va=sk==='fd'?(a.fd||0):(sk==='n'?a.n:(sk==='ap'?appl(a):(a.act?1:0))), vb=sk==='fd'?(b.fd||0):(sk==='n'?b.n:(sk==='ap'?appl(b):(b.act?1:0))); var c=va<vb?-1:(va>vb?1:0); return dir==='desc'?-c:c; });
@@ -273,7 +273,7 @@ function workedExample(b){
   return '<div class="meta">If the conditions turned true now, '+esc(fmt(now))+', on <b>'+esc(ex?ex.id:'a line')+'</b>'+(ex?' ('+esc(uname(ex.owner))+')':'')+':</div><dl class="kvlist mt12"><dt>Created</dt><dd>'+esc(fmt(created))+'</dd><dt>Due</dt><dd>'+esc(fmt(due))+'</dd><dt>Escalates</dt><dd>'+(escAt?esc(fmt(escAt))+' → '+esc(uname(mg&&mg.mgr?mg.mgr:'vikram')):'Never')+'</dd></dl><div class="meta mt12">'+esc(tx)+' Weekends and the '+HOL.length+' listed holidays are skipped.</div>';
 }
 SCREENS.rule=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var id=S.route.id||'new', r=rbLoad(id); if(!r) return SCREENS.notfound();
   var b=S.ui.rb, e=ruleErrors(b,id), w=ruleWarnings(b), t=S.ui.rb_touch, isNew=id==='new', nerr=Object.keys(e).length, c=cfg();
   var html='<div class="crumbs"><button data-go="rules">Task rules</button>'+ic('chevright','ic14')+'<b>'+(isNew?'Create a task rule':esc(id))+'</b></div>'+
@@ -388,7 +388,7 @@ function simTaskRow(t,l){
   return '<div class="rtask'+(t.done?' done':'')+'"><span class="tick">'+(t.done?'✓':'')+'</span><div class="bd"><b>'+esc(t.title)+'</b><div class="m">'+chip(tstateLabel(s),tone,false,true)+chip(t.cls,t.cls==='SLA'?'violet':'neutral',false,true)+m+(t.rule?'<button class="rl" data-go="rule" data-id="'+t.rule+'">'+esc(t.rule)+'</button>':'<span class="meta">by hand</span>')+'</div></div></div>';
 }
 SCREENS.rulesim=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var l=simLine(); if(!l) return {sc:'Simulator', html:empty('inbox','No lines yet','Create an opportunity first.'), cta:''};
   var a=acctOf(l), o=oppOf(l), now=S.now, c=cfg();
   var lts=tasksOfLine(l.id), open=lts.filter(function(t){return !t.done;}).sort(function(x,y){return x.dueAt-y.dueAt;}), dn=lts.filter(function(t){return t.done;}).sort(function(x,y){return y.doneAt-x.doneAt;}).slice(0,8);
@@ -434,7 +434,7 @@ document.addEventListener('toggle',function(ev){ var t=ev.target; if(t instanceo
 
 /* ---------- R4 · task settings ---------- */
 SCREENS.rulecfg=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var c=cfg(), hrs=[]; for(var h=c.ws;h<c.we;h++) hrs.push([h,p2(h)+':00']);
   var html='<div class="hdrow"><div><div class="h1">Task settings</div><div class="sub">One calendar, held centrally. Every clock, every wait and both scheduled checks run on it. There are no per-rule working hours.</div></div></div>'+diamonds()+rulesTabs('rulecfg')+
     '<div class="gap12" style="max-width:860px">'+

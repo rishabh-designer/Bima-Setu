@@ -180,7 +180,7 @@ function renTable(rows){
   return '<div class="tw"><table class="t"><thead><tr><th>Renewal</th><th>Account</th><th>Expiring policy</th><th>Renewal due</th><th>Stage</th><th>Waiting on</th><th class="num">Expiring premium</th></tr></thead><tbody>'+rows.map(renRow).join('')+'</tbody></table></div>';
 }
 SCREENS.renewals=function(){
-  var u=me(); if(u.role!=='rm'&&u.role!=='rmhead') return noAccess('screen');
+  var u=me(); if(u.role!=='rm'&&u.role!=='rmhead'&&u.role!=='admin') return noAccess('screen');
   var ids=scopeIds(u), all=renLines().filter(function(l){ return ids.indexOf(l.owner)>=0; }), f=S.ui.rnf||'due', sel=S.ui.rnb||'';
   var byExp=function(x,y){ var a=renPolHit(x), b=renPolHit(y); return (a?a.p.exp:0)-(b?b.p.exp:0); };
   var due=all.filter(renDue).sort(byExp), renewed=all.filter(function(l){ return !dead(l)&&l.stage>=SALES_STAGES; }).sort(byExp), lost=all.filter(dead).sort(byExp);

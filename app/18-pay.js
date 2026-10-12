@@ -26,7 +26,7 @@ FLOWS.share={t:'Share payment details with the client', sub:'Check the payment m
       (payModeOf(l)==='Payment link'?'<button type="button" class="btn sm" data-copy="1">Copy the payment link</button>':''); },
   repaintOn:['ch'],
   can:function(){return true;}, ok:function(){ return 'Send to '+FL().contact.n; },
-  run:function(){ var l=FL(), made=[]; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='shared'; logAdd(x,'Payment details shared with client',uname(S.user)+' · '+payModeOf(l)+' · '+(S.sel.ch||'Email')+' to '+(S.sel.ch==='WhatsApp'?x.contact.m:x.contact.e),'pay'); if(x.stage<10) made=made.concat(moveStage(x,10,'Payment details sent')); }); },'sharing'); if(!ok) return 'fail'; toast('Payment details sent to '+l.contact.n,payModeOf(l)+' · '+stageToast(l,made)); }};
+  run:function(){ var l=FL(), made=[]; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='shared'; logAdd(x,'Payment details shared with client',uname(S.user)+' · '+payModeOf(l)+' · '+(S.sel.ch||'Email')+' to '+(S.sel.ch==='WhatsApp'?x.contact.m:x.contact.e),'pay'); if(x.stage<11) made=made.concat(moveStage(x,11,'Payment details sent')); }); },'sharing'); if(!ok) return 'fail'; toast('Payment details sent to '+l.contact.n,payModeOf(l)+' · '+stageToast(l,made)); }};
 
 /* ---------- confirm payment: a screenshot, read ---------- */
 function proofUtr(l){ return 'UTIB'+'2609'+l.id.slice(3)+'1178'; }
@@ -79,7 +79,7 @@ FLOWS.proof={t:'Confirm payment', sub:'Upload the payment screenshot the client 
       logAdd(x,'Sold by '+uname(x.owner),'System · '+(x.picked||'')+' · '+INR(premOf(x)),'sys',1);
       x.notSel=quotesFor(x).filter(function(q){return q.st==='quoted'&&q.i!==x.picked;}).map(function(q){return q.i;});
       logAdd(x,'Owner changed from '+uname(x.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · Sold by '+uname(x.owner)+' · account owner moved too','sys',1);
-      x.owner=rm; tasksOfLine(x.id).forEach(function(t){ if(!t.done) t.owner=rm; }); moveStage(x,11,'Payment confirmed'); issCreate(x); });
+      x.owner=rm; tasksOfLine(x.id).forEach(function(t){ if(!t.done) t.owner=rm; }); moveStage(x,12,'Payment confirmed'); issCreate(x); });
       if(a) a.own=rm; },'the payment'); if(!ok) return 'fail';
     toast('Paid — handed to '+uname(rm),'Payment Completed. Sold by '+uname(S.user)+'. The post-purchase ticket is open; the RM’s welcome-call clock is running.'); }};
 document.addEventListener('change',function(ev){

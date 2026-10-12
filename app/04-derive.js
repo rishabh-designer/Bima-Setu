@@ -19,8 +19,8 @@ function tasksOfLine(id){ return S.data.tasks.filter(function(t){return t.line==
    when the attempt ladder runs out (TBD-06: 10 calls, no timing rule, no channel rule). */
 function dead(l){ return l.status==='lost'||l.status==='noapp'||l.status==='disq'||l.status==='withdrawn'||l.status==='unreach'; }
 function openLine(l){ return l.status==='open' && l.stage<SALES_STAGES; }           /* still selling */
-function postLine(l){ return l.status==='open' && l.stage>=SALES_STAGES && l.stage<14; } /* paid, inside the post-purchase ticket */
-function issuedLine(l){ return l.stage===14; }
+function postLine(l){ return l.status==='open' && l.stage>=SALES_STAGES && l.stage<15; } /* paid, inside the post-purchase ticket */
+function issuedLine(l){ return l.stage===15; }
 function isMgrRole(u){ u=u||me(); return !!u && (u.role==='mgr'||u.role==='rmhead'); }
 function rmTeam(headId){ return S.data.users.filter(function(u){return u.role==='rm'&&u.mgr===headId;}); }
 /* [stated 23 Sep] a head works in two views — their own book, or the team's. The switch is global:
@@ -28,19 +28,19 @@ function rmTeam(headId){ return S.data.users.filter(function(u){return u.role===
    apply — a line is one record with one owner, whoever is looking at it. */
 function hasViews(u){ u=u||me(); return !!u&&(u.role==='mgr'||u.role==='rmhead'); }
 function teamView(u){ u=u||me(); return hasViews(u)&&S.ui.vw!=='mine'; }
-function scopeIds(u){ u=u||me(); if(!u) return [];
+function scopeIds(u){ u=u||me(); if(!u) return []; if(u.role==='admin') return S.data.users.map(function(x){return x.id;});
   if(!teamView(u)) return [u.id];
   /* [stated 26 Sep · 17.5] Team view is the team, not the head's own book */
   return (u.role==='mgr'?teamOf(u.id):rmTeam(u.id)).map(function(x){return x.id;}); }
 function inScope(uid,u){ return scopeIds(u).indexOf(uid)>=0; }
-function homeRoute(u){ u=u||me(); if(!u) return 'home';
+function homeRoute(u){ u=u||me(); if(!u) return 'home'; if(u.role==='admin') return 'adminhome';
   if(u.role==='mgr') return teamView(u)?'team':'home';
   if(u.role==='rmhead') return teamView(u)?'rmteam':'rmhome';
   return u.role==='rm'?'rmhome':'home'; }
 function stageName(n){ return STAGES[n-1]?STAGES[n-1].s:'?'; }
-function skipped(l,n){ if(l.renews&&n<=2) return true; if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
+function skipped(l,n){ if(l.renews&&n<=2) return true; if(n===9) return isChola(l)||!(acctOf(l)&&acctOf(l).prov); if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
 function routeTx(l){ if(l.renews) return 'Non-DUA · renewal'; return l.rate===null||l.rate===undefined?'Route not known yet':(l.rate?'DUA':(l.routeSwitch?'Non-DUA · switched from DUA':'Non-DUA')); }
-function statusTx(l){ return {open:'Open',park:'Time Pending',lost:'Lost',noapp:'No Appetite',disq:'Disqualified',withdrawn:'Withdrawn',unreach:'Unreachable'}[l.status]||l.status; }
+function statusTx(l){ if(l.status==='open'&&l.stage>=SALES_STAGES) return 'Won'; return {open:'Open',park:'Time Pending',lost:'Lost',noapp:'No Appetite',disq:'Disqualified',withdrawn:'Withdrawn',unreach:'Unreachable'}[l.status]||l.status; }
 function statusTone(l){ return l.status==='open'?'green':(l.status==='park'?'amber':'red'); }
 /* [stated 26 Sep · 2.9] the opportunity name is <account legal name>_<opportunity id>, rendered at read time
    and never stored — so it follows the account's legal name, the rename on verification included. */
@@ -57,7 +57,7 @@ function confirmed(l){ return l.stage>=9 && l.status==='open'; }
 function actingParty(l){
   /* [stated 26 Sep · 2.1] waiting-on has three values only — Us, Client, Insurer. Placement, Ops
      and the post-purchase desk are internal, so a line waiting on them waits on Us. */
-  if(dead(l)||l.stage===14) return '—';
+  if(dead(l)||l.stage===15) return '—';
   if(l.status==='park') return 'Client';
   if(l.stage>=SALES_STAGES){ var w=issWaiting(l); return (w==='Client'||w==='Insurer')?w:'Us'; }
   return STAGES[l.stage-1].w;
@@ -67,8 +67,9 @@ function waitHow(l){ var w=actingParty(l);
   if(w==='—') return dead(l)?'Closed — nobody is waiting.':'Issued — nothing is outstanding.';
   if(l.status==='park') return 'Time Pending: the client asked us to come back on '+fmtD(l.revisit)+'.';
   if(l.stage===6) return 'Quote Requested: placement is an internal team, so the line waits on Us'+(l.plcQ&&!l.qAns&&l.round===1?' — and placement has a query for you':'')+'.';
-  if(l.stage===9) return l.pay==='ticket'?'Purchase Requested: the payment ticket is with Ops, an internal team — so Us.':(l.pay==='back'?'Purchase Requested: the payment details are back and ours to send.':'Purchase Requested: the payment request is ours to raise.');
+  if(l.stage===10) return l.pay==='ticket'?'Purchase Requested: the payment ticket is with Ops, an internal team — so Us.':(l.pay==='back'?'Purchase Requested: the payment details are back and ours to send.':'Purchase Requested: the payment request is ours to raise.');
   if(l.stage>=SALES_STAGES) return 'Read from the post-purchase ticket'+(l.iss?' '+l.iss.id:'')+': '+(w==='Client'?'a document is with the client.':(w==='Insurer'?'the insurer owes a document.':'the next step is ours — the RM or the desk.'));
+  if(l.stage===9) return 'KYC Details Requested: the client owes PAN and GST — the payment request opens once KYC is in.';
   return stageName(l.stage)+' waits on '+w+' by definition.';
 }
 function waitTone(w){ return w==='Us'?'amber':(w==='Client'?'blue':(w==='Placement'||w==='Ops'||w==='Insurer'||w==='Post-purchase'?'violet':'neutral')); }
@@ -84,7 +85,7 @@ function daysQuiet(l){ return daysBetween(lastActivity(l),S.now); }
 function daysInStage(l){ return daysBetween(l.enteredAt,S.now); }
 function workDays(a,b){ return Math.floor(workMins(a,b)/((WH.end-WH.start)*60)); }
 function workDaysInStage(l){ return workDays(l.enteredAt,S.now); }
-var STALL={11:1, 12:5, 13:3};              /* working days in stage */
+var STALL={12:1, 13:5, 14:3};              /* working days in stage */
 var UNCALLED_DAYS=3;                        /* working days a new lead may sit uncalled */
 function stalledPost(l){ var t=STALL[l.stage]; return t!==undefined && workDaysInStage(l)>t; }
 function uncalledLate(l){ return openLine(l) && l.stage===1 && !attempts(l) && workDays(l.assignedAt||l.createdAt,S.now)>=UNCALLED_DAYS; }
@@ -115,7 +116,7 @@ function myTasks(uid){ return S.data.tasks.filter(function(t){return t.owner===u
 function escalatedTo(mgrId){ return S.data.tasks.filter(function(t){ if(t.done||taskState(t)!=='esc') return false; var u=userById(t.owner); return u && u.mgr===mgrId; }); }
 
 /* the task engine lives in 14-rules.js: fireRules(l) runs every rule against the line */
-function logAdd(l,t,m,kind,sys){ l.log.unshift({at:S.now,t:t,m:m||uname(S.user),sys:sys?1:0,kind:kind||'note'}); }
+function logAdd(l,t,m,kind,sys){ l.log.unshift({at:S.now,t:t,m:m||actorTag(),sys:sys?1:0,kind:kind||'note'}); }
 function moveStage(l,n,why){
   var from=l.stage; visitsOf(l);
   var cur=l.visits[l.visits.length-1]; if(cur&&!cur.out) cur.out=S.now;
@@ -154,14 +155,14 @@ function myTeam(u){ u=u||me(); return S.data.users.filter(function(x){ return x.
 function inMyTeam(uid,u){ var x=userById(uid); u=u||me(); return !!x&&x.mgr===u.id; }
 /* permissions */
 function canTakeOver(l){ var u=me(), o=userById(l.owner); return !!u&&!!o&&o.mgr===u.id&&l.owner!==u.id&&(openLine(l)||postLine(l)||l.status==='park'); }
-function canAct(l){ var u=me(); return !!u && l.owner===u.id && !dead(l); }
+function canAct(l){ var u=me(); return !!u && (u.role==='admin'||l.owner===u.id) && !dead(l); }
 function isMine(l){ var u=me(); return !!u && l.owner===u.id; }
-function readOnlyWhy(l){ var u=me(); if(!u) return '';
+function readOnlyWhy(l){ var u=me(); if(!u) return ''; if(u.role==='admin') return dead(l)?(closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.'):'';
   if(l.owner!==u.id){
     if(l.soldBy===u.id) return 'Sold by you. Owned by '+uname(l.owner)+' since payment — you keep read access.';
     return 'Owned by '+uname(l.owner)+'.'+(canTakeOver(l)?' You can see everything here; to work it, take ownership.':''); }
   if(dead(l)) return closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.';
-  if(l.stage===14) return 'Issued. The policy copy and tax invoice went to the client on the three rails. Renewal is a separate opportunity.'; return ''; }
+  if(l.stage===15) return 'Issued. The policy copy and tax invoice went to the client on the three rails. Renewal is a separate opportunity.'; return ''; }
 /* placement and payment tickets are derived from the line */
 function ticketsOf(l){
   var out=[];
@@ -199,7 +200,7 @@ function nextAction(l){
   if(st>=SALES_STAGES) return postNextAction(l);
   if(l.status==='park') return {tone:'neutral',lab:'Time Pending',txt:'Time Pending — revisit on '+fmtD(l.revisit)+' · '+(l.reason||''),why:'The stage is unchanged — still at '+stageName(st)+'. It comes back to Open by itself on the revisit date, or when a call connects.',acts:[['resume','Resume']]};
   if(isChola(l)) return cholaSalesNext(l);
-  switch((st===10&&l.pay!=='shared'&&l.pay!=='paid')?9:st){
+  switch((st===11&&l.pay!=='shared'&&l.pay!=='paid')?10:st){
     case 1: return {tone:'amber',lab:'Next action',txt:'Nobody has spoken to them yet',why:l.inbound?'They came in from the '+(l.src||'website')+' — call them while it is fresh.':'First contact can go straight to discovery if they are ready.',acts:[['ctc',l.inbound?'Call':'First contact'],['call','Log a call manually']]};
     /* [stated 24 Sep · TBD-06] 10 calls is the cap; the tenth no-connect closes the line as Unreachable */
     case 2: var rq2=reqCount(l), on2=reqOnlineN(l); return {tone:'amber',lab:'Next action',txt:on2&&!callsMade(l)?'Answered '+rq2.n+' of '+rq2.m+' online':(rq2.n&&rq2.miss.length?plural(rq2.miss.length,'discovery question')+' left. Call to complete':plural(callsMade(l),'call')+' logged. Reach the decision maker and capture the requirement'),why:(l.inbound&&!callsMade(l)?'Came in from the '+(l.src||'website')+' with the first steps done online — confirm them on the call. ':'')+'Calls are counted per product line. '+(everConnected(l)?'This line has been reached, so the attempt ladder does not apply.':(ATTEMPT_CAP-l.att)+' attempts left before this line closes as Unreachable.'),acts:[['ctc','Call'],['disc','Capture requirement'],['call','Log a call manually']]};
@@ -234,13 +235,15 @@ function nextAction(l){
       if(d8>=QUOTE_VALID) return {tone:'red',lab:'Quotes expired',txt:'The quotes on QCR v'+l.round+' expired '+plural(d8-QUOTE_VALID,'day')+' ago',why:'An expired quote cannot be confirmed. '+(l.rate?'Ask the client whether to re-rate.':'Send the QCR back for fresh quotes.'),acts:l.rate?[['rejectAll','Client rejected every quote']]:[['objectQcr','Send the QCR back for revision']]};
       return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d8?plural(d8,'day')+' ago':'today'),why:'QCR v'+l.round+' is with '+(l.contact.n||'the client')+'.'+(l.rate?' If they reject every quote, the line switches to the RFQ route.':''),acts:l.rate?[['confirm','Record client confirmation'],['rejectAll','Client rejected every quote'],['resendQcr','Resend']]:[['confirm','Record client confirmation'],['objectQcr','Send the QCR back for revision'],['resendQcr','Resend']]};
     case 9:
+      return {tone:'red',lab:'KYC pending',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request. The opportunity waits here at KYC Details Requested until the client sends them — a KYC drop-off shows separately from a payment drop-off in the funnel.',acts:[['kyc','Get verified']]};
+    case 10:
       if(a && a.prov) return {tone:'red',lab:'Blocked',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request.',acts:[['kyc','Get verified']]};
       if(l.payQ&&!l.payQ.ans) return {tone:'amber',lab:'Next action',txt:'Ops has a query on '+payRef(l),why:'The ticket is on hold until you answer. The stage does not move.',acts:[['payAnswer','Answer the query'],['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='pre'&&(l.payOld||[]).length&&!(a&&a.prov)) return {tone:'amber',lab:'Next action',txt:'The payment link expired unpaid',why:(l.payOld||[]).slice(-1)[0]+' was closed by Ops. Raise a new request — a ticket is never reopened.',acts:[['pay','Raise a new payment request']]};
       if(l.pay==='ticket') return {tone:'violet',lab:'With Ops',txt:'Payment ticket '+payRef(l)+' with ops',why:'Ops prepares the payment details. They come back here.',acts:[['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details received, not yet sent to the client',why:'Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
       return {tone:'amber',lab:'Next action',txt:'Ready for a payment request',why:'One request can cover several of your lines on the opportunity.',acts:[['pay','Raise payment request']]};
-    case 10: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
+    case 11: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }

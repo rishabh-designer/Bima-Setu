@@ -1,0 +1,8 @@
+/* Fixes applied on top of the prototype artifact. build.mjs injects this file
+   after 01-css.html; porting a new artifact version never touches it. After each
+   port, check whether the prototype now carries a fix, and delete the rule if so. */
+
+/* Account 360 → Compliance: the PAN row's verification line does not wrap, so
+   below ~1400px it stretches the account page past the panel and the View and
+   Download buttons are clipped. Present in v64 and v73. */
+.doclist .bd .m{white-space:normal}

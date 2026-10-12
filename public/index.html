@@ -997,6 +997,16 @@ details.oact summary{list-style:none;cursor:pointer;display:flex;align-items:cen
 details.rqsum summary{list-style:none;cursor:pointer;font-weight:600;color:var(--ink)}details.rqsum summary::-webkit-details-marker{display:none}
 details.rqsum summary .link{font-weight:500;margin-left:8px}
 </style>
+<style>
+/* Fixes applied on top of the prototype artifact. build.mjs injects this file
+   after 01-css.html; porting a new artifact version never touches it. After each
+   port, check whether the prototype now carries a fix, and delete the rule if so. */
+
+/* Account 360 → Compliance: the PAN row's verification line does not wrap, so
+   below ~1400px it stretches the account page past the panel and the View and
+   Download buttons are clipped. Present in v64 and v73. */
+.doclist .bd .m{white-space:normal}
+</style>
 
 </head>
 <body>
@@ -1123,7 +1133,7 @@ function durMins(n,u){ return u==='h' ? n*60 : n*(WH.end-WH.start)*60; }
 function durTx(n,u){ return n+' working '+(u==='h'?(n==1?'hour':'hours'):(n==1?'day':'days')); }
 
 /* ---------- state ---------- */
-var KEY='bksales.v16';
+var KEY='bksales.v20';
 var S={user:null, now:T0.getTime(), route:{v:'signin'}, hist:[], data:null, flow:null, sel:{}, ui:{}, offline:false, pending:null, side:false};
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({user:S.user, now:S.now, data:S.data, route:S.route})); }catch(e){} }
 function load(){ try{ var raw=localStorage.getItem(KEY); if(!raw) return false; var o=JSON.parse(raw); if(!o||!o.data||!o.data.lines) return false; S.user=o.user; S.now=o.now||T0.getTime(); S.data=o.data; S.route=o.route&&o.route.v!=='signin'?o.route:{v:'home'}; return true; }catch(e){ return false; } }
@@ -1140,6 +1150,7 @@ function retry(){ if(S.offline){ toast('Still offline','Reconnect from the sideb
 
 /* ---------- router ---------- */
 function go(v,p,replace){
+  if(S.ui){S.ui.paymode=false;S.ui.paysel=[];}
   var r={v:v}; if(p) for(var k in p) r[k]=p[k];
   if(!replace && S.route && S.route.v!=='signin'){ S.hist.push(S.route); if(S.hist.length>40) S.hist.shift(); }
   S.route=r; S.flow=null; S.sel={}; S.side=false; window.scrollTo(0,0); save(); paint();
@@ -1214,14 +1225,15 @@ var STAGES=[
  {n:6, s:'Quote Requested',              t:'Quote Requested', w:'Us'},
  {n:7, s:'Quotes Received',              t:'Quotes Received', w:'Us'},
  {n:8, s:'Quote Sent',                   t:'Quote Sent',      w:'Client'},
- {n:9, s:'Purchase Requested',           t:'Purchase Requested', w:'Us'},
- {n:10,s:'Payment Details Shared with Client', t:'Details Shared', w:'Client'},
- {n:11,s:'Payment Completed',            t:'Payment Completed', w:'Us'},
- {n:12,s:'Policy Documents Pending',     t:'Docs Pending',    w:'Client'},
- {n:13,s:'Awaiting Policy Copy',         t:'Awaiting Copy',   w:'Insurer'},
- {n:14,s:'Policy Copy Sent to Client',   t:'Copy Sent',       w:'—'}
+ {n:9, s:'KYC Details Requested',        t:'KYC Requested',   w:'Client'},
+ {n:10,s:'Purchase Requested',           t:'Purchase Requested', w:'Us'},
+ {n:11,s:'Payment Details Shared with Client', t:'Details Shared', w:'Client'},
+ {n:12,s:'Payment Completed',            t:'Payment Completed', w:'Us'},
+ {n:13,s:'Policy Documents Pending',     t:'Docs Pending',    w:'Client'},
+ {n:14,s:'Awaiting Policy Copy',         t:'Awaiting Copy',   w:'Insurer'},
+ {n:15,s:'Policy Copy Sent to Client',   t:'Copy Sent',       w:'—'}
 ];
-var SALES_STAGES=11; /* ownership moves to the RM at 11; 12–14 are the post-purchase ticket's stages */
+var SALES_STAGES=12; /* ownership moves to the RM at 12 (Payment Completed); 13–15 are the post-purchase ticket's stages */
 var CATOF={'Fire & Special Perils':'Property & casualty','Burglary':'Property & casualty','Workmen’s Compensation':'Property & casualty',
  'Industrial All Risk':'Property & casualty','Contractors All Risk':'Property & casualty','Erection All Risk':'Property & casualty',
  'Marine Cargo':'Marine & liability','Commercial General Liability':'Marine & liability','Cyber Liability':'Marine & liability',
@@ -1306,7 +1318,8 @@ function seed(){
    {id:'vikram', n:'Vikram Rao',    role:'mgr',  cat:'', mgr:'', title:'Sales manager · P&C and Marine team'},
    {id:'priya',  n:'Priya Nair',    role:'rm',   cat:'', mgr:'meera', title:'Relationship manager'},
    {id:'meera',  n:'Meera Pillai',  role:'rmhead', cat:'', mgr:'', title:'Head of relationship management'},
-   {id:'radha',  n:'Radha Iyer',    role:'cs',   cat:'', mgr:'', title:'Customer Success · post-purchase desk'}
+   {id:'radha',  n:'Radha Iyer',    role:'cs',   cat:'', mgr:'', title:'Customer Success · post-purchase desk'},
+   {id:'admin',  n:'Aditya Verma',  role:'admin', cat:'', mgr:'', title:'Administrator · full access'}
   ];
   function A(id,n,pan,gst,o){ var a=Object.assign({id:id,n:n,trade:'',pan:pan||'',gst:gst||'',city:'',st:'',ind:'',emp:'',to:'',grp:'—',own:'nikhil',prov:0,con:[],pols:[],recs:[],prof:null,fin:null,sis:[],createdAt:ago(400),createdBy:'nikhil',log:[]},o||{}); if(!a.prov){ a.kycBy=a.kycBy||a.own; a.kycAt=a.kycAt||a.createdAt+20*86400000; a.kycHow=a.kycHow||(a.aad?'PAN card and Aadhaar uploaded':'PAN card and GST certificate uploaded · PAN matched the PAN inside the GSTIN'); } return a; }
   var accounts=[
@@ -1323,13 +1336,25 @@ function seed(){
    A('A-1003','Meridian Chemicals Ltd','AACCM2210K','24AACCM2210K1Z9',{city:'Vadodara',st:'Gujarat',ind:'Specialty chemicals',emp:'680',to:'₹410 Cr',grp:'Meridian Group',own:'nikhil',createdAt:ago(30),
      con:[{n:'Devang Shah',d:'Head of Risk',m:'+91 99240 18876',e:'devang.shah@meridianchem.com',dm:1}],
      prof:{risk:'High',cls:'Manufacture of chemicals · NIC 20119',exp:'Two independent directors appointed in FY26. Directors & Officers is the live need.'},
-     fin:{rev:'₹410.2 Cr',pat:'₹31.4 Cr',net:'₹188.0 Cr',yr:'FY 2025-26',cin:'L24100GJ1994PLC021118',read:'8 Sep 2026'}})
+     fin:{rev:'₹410.2 Cr',pat:'₹31.4 Cr',net:'₹188.0 Cr',yr:'FY 2025-26',cin:'L24100GJ1994PLC021118',read:'8 Sep 2026'}}),
+   A('A-1004','Crestline Logistics Pvt Ltd','AADCL5567P','29AADCL5567P1Z4',{trade:'Crestline',city:'Bengaluru',st:'Karnataka',ind:'Logistics & warehousing',emp:'320',to:'₹120 Cr',own:'nikhil',createdAt:ago(22),
+     con:[{n:'Kavya Rao',d:'Finance Controller',m:'+91 98860 33210',e:'kavya.rao@crestline.in',dm:1}],
+     prof:{risk:'Moderate',cls:'Logistics & warehousing · NIC 52109',exp:'Two warehouses in Bengaluru. Buying Fire and Burglary together — one payment.'},
+     fin:{rev:'₹120.5 Cr',pat:'₹6.2 Cr',net:'₹44.0 Cr',yr:'FY 2025-26',cin:'U63030KA2013PTC071145',read:'10 Sep 2026'}}),
+   A('A-1005','Vantage Textiles Pvt Ltd','AAFCV7721R','33AAFCV7721R1Z8',{trade:'Vantage',city:'Coimbatore',st:'Tamil Nadu',ind:'Textile manufacturing',emp:'520',to:'₹210 Cr',own:'nikhil',createdAt:ago(19),
+     con:[{n:'Suresh Iyer',d:'CFO',m:'+91 98430 55120',e:'suresh.iyer@vantagetex.in',dm:1}],
+     prof:{risk:'Moderate',cls:'Textile manufacturing · NIC 13111',exp:'Buying Group Health and Marine together — one payment across two opportunities.'},
+     fin:{rev:'₹210.0 Cr',pat:'₹12.0 Cr',net:'₹80.0 Cr',yr:'FY 2025-26',cin:'U17111TZ2011PTC017882',read:'9 Sep 2026'}})
   ];
   function O2(id,acct,type,bt,src,created,by_){ var a=by(accounts,acct); return {id:id,acct:acct,type:type,bt:bt,src:src,created:created,by:by_}; }
   var opps=[
    O2('OPP-001001','A-1001','New Business','Fresh','Website',ago(0,2),'system'),
    O2('OPP-001002','A-1002','New Business','Fresh','Website',ago(0,4),'system'),
-   O2('OPP-001003','A-1003','New Business','Fresh','Website',ago(0,6),'system')
+   O2('OPP-001003','A-1003','New Business','Fresh','Website',ago(0,6),'system'),
+   O2('OPP-001004','A-1004','New Business','Fresh','Referral',ago(12),'nikhil'),
+   O2('OPP-001005','A-1004','New Business','Fresh','Referral',ago(12),'nikhil'),
+   O2('OPP-001006','A-1005','New Business','Fresh','Referral',ago(10),'nikhil'),
+   O2('OPP-001007','A-1005','New Business','Fresh','Referral',ago(10),'nikhil')
   ];
   var contactsOf=function(acct){ var a=by(accounts,acct); return a&&a.con[0]?{n:a.con[0].n,e:a.con[0].e||'',m:a.con[0].m||''}:{n:'',e:'',m:''}; };
   function L(id,opp,acct,product,owner,stage,o){
@@ -1340,7 +1365,7 @@ function seed(){
       round:1,qAns:o.qAns||0,obj:'',qsel:[],picked:o.picked||'',prem:o.prem||240000,ins:o.ins||'',pay:o.pay||'pre',payMode:o.payMode||'',amt:0,payLines:[],renews:o.renews||'',
       enteredAt:o.enteredAt||ago(idle),createdAt:created,assignedAt:o.assignedAt||created,src:o.src||'',contact:contactsOf(acct),
       log:o.log||[{at:created,t:'Product line created',m:'System',sys:1,kind:'sys'}]};
-    if(stage>=8 && !l.picked && stage<11) l.picked='';
+    if(stage>=8 && !l.picked && stage<12) l.picked='';
     if(stage>=9 && !l.picked) l.picked = l.rate?'ICICI Lombard':'New India Assurance';
     if(l.picked) l.ins=l.picked;
     if(stage>=2 && idle>0 && !o.log) l.log.push({at:ago(idle),t:'Stage entered: '+STAGES[stage-1].s,m:'System',sys:1,kind:'stage'});
@@ -1353,7 +1378,12 @@ function seed(){
    /* Non-DUA case — Cyber Liability (never rateable → RFQ, then placement) */
    L('OP-2002','OPP-001002','A-1002','Cyber Liability','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,4),createdAt:ago(0,4),prem:142000}),
    /* DUA-turned-Non-DUA case — D&O starts DUA (made rateable above) then switches on an empty rater */
-   L('OP-2003','OPP-001003','A-1003','Directors & Officers','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,6),createdAt:ago(0,6),prem:210000})
+   L('OP-2003','OPP-001003','A-1003','Directors & Officers','nikhil',1,{idle:0,att:0,src:'Website',assignedAt:ago(0,6),createdAt:ago(0,6),prem:210000}),
+   /* [12 Oct · demo] two opportunities on one account at Purchase Requested — the payment multi-select */
+   L('OP-2004','OPP-001004','A-1004','Fire & Special Perils','nikhil',10,{idle:3,src:'Referral',prem:180000,si:'₹40 Cr',picked:'ICICI Lombard'}),
+   L('OP-2005','OPP-001005','A-1004','Burglary','nikhil',10,{idle:3,src:'Referral',prem:95000,si:'₹8 Cr',picked:'Tata AIG'}),
+   L('OP-2006','OPP-001006','A-1005','Group Health','nikhil',10,{idle:2,src:'Referral',prem:640000,si:'₹5 L/employee',picked:'ICICI Lombard'}),
+   L('OP-2007','OPP-001007','A-1005','Marine Cargo','nikhil',10,{idle:2,src:'Referral',prem:84000,si:'₹6 Cr',picked:'New India Assurance'})
   ];
   /* postSeed skipped — the 3-line demo seeds no paid/post-purchase lines */
   /* [8 Oct · demo] A small RM book: four issued post-purchase lines split across the two
@@ -1364,7 +1394,7 @@ function seed(){
       var a=by(accounts, acc);
       a.pols.push({id:polId, ins:ins, p:prod, si:si, pr:prem, exp:exp, endo:0, issuing:0, line:lineId});
       var oppId='OPP-'+lineId.slice(3);
-      var l=L(lineId, oppId, acc, prod, owner, 14, {idle:0, att:3, prem:prem, picked:ins, ins:ins, pay:'paid', si:si, createdAt:ago(paidAgo+20), enteredAt:ago(Math.max(1,paidAgo-6))});
+      var l=L(lineId, oppId, acc, prod, owner, 15, {idle:0, att:3, prem:prem, picked:ins, ins:ins, pay:'paid', si:si, createdAt:ago(paidAgo+20), enteredAt:ago(Math.max(1,paidAgo-6))});
       l.paidAt=ago(paidAgo); l.soldBy=soldBy; l.soldName=soldName; l.amt=prem;
       l.hand={note:'', by:soldBy, at:ago(paidAgo), utr:'', proof:'Payment screenshot', read:'matched'};
       l.iss={id:issId, owner:'radha', createdAt:ago(paidAgo), assignedAt:ago(paidAgo), stage:'closed', skip12:false,
@@ -1418,12 +1448,12 @@ function seed(){
    R({id:'TR-01',n:'Work the new lead',when:[[st(1),isOpen()]],ti:'Call the new lead',cl:'sla',du:4,duu:'h',ec:4,ecu:'h',recheck:'hourly',closeWhen:[[notSt(1)]],fd:128}),
    R({id:'TR-02',n:'Chase the RFQ',when:[[st(4),isOpen()]],ti:'Chase the RFQ with the client',cl:'sla',du:3,duu:'d',ec:2,ecu:'d',recheck:'daily',closeWhen:[[notSt(4)]],fd:34}),
    R({id:'TR-03',n:'Callback',when:[[C('disp','is','Asked to call back later'),isOpen()]],ti:'Call the client back',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',recheck:'off',closeWhen:[[C('disp','isnot','Asked to call back later')]],fd:61}),
-   R({id:'TR-04',n:'Chase the payment',when:[[st(10),isOpen()]],ti:'Payment details shared — still unpaid',cl:'sla',du:6,duu:'h',ec:6,ecu:'h',recheck:'hourly',closeWhen:[[notSt(10)]],fd:22}),
+   R({id:'TR-04',n:'Chase the payment',when:[[st(11),isOpen()]],ti:'Payment details shared — still unpaid',cl:'sla',du:6,duu:'h',ec:6,ecu:'h',recheck:'hourly',closeWhen:[[notSt(11)]],fd:22}),
    R({id:'TR-05',n:'Marine quote review',when:[[st(8)]],pf:['Marine Cargo'],ap:'grp',gp:'Marine group',ti:'Review the quote before it goes out',cl:'sla',du:1,duu:'d',ec:1,ecu:'d',recheck:'off',from:'2026-07-01',fd:9}),
    R({id:'TR-06',n:'Chase placement for quotes',when:[[st(6),isOpen()]],rt:'plc',ti:'Chase placement for quotes',cl:'sla',du:2,duu:'d',ec:2,ecu:'d',recheck:'daily',closeWhen:[[notSt(6)]],from:'2026-05-01',fd:0}),
    R({id:'TR-07',n:'Renewal consultation',when:[[st(2)]],ot:'ren',ti:'Set up the renewal consultation',cl:'fu',du:3,duu:'d',ec:0,ecu:'d',recheck:'off',sea:'renewal',act:0,fd:44}),
    /* RM clocks — [proposed] values, editable here */
-   R({id:'TR-09',n:'Chase the proposal form and mandate',when:[[st(12)]],ti:'Chase the proposal form and mandate',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',waitN:1,waitU:'d',recheck:'daily',repeat:true,max:3,closeWhen:[[notSt(12)]],from:'2026-09-21',fd:2}),
+   R({id:'TR-09',n:'Chase the proposal form and mandate',when:[[st(13)]],ti:'Chase the proposal form and mandate',cl:'fu',du:2,duu:'d',ec:0,ecu:'d',waitN:1,waitU:'d',recheck:'daily',repeat:true,max:3,closeWhen:[[notSt(13)]],from:'2026-09-21',fd:2}),
    /* chains that only the condition model can express */
    R({id:'TR-11',n:'Follow-up call after no connect',when:[[st(2),C('disp','is','group:nc'),isOpen()]],waitN:4,waitU:'h',recheck:'hourly',ti:'Follow-up call',cl:'fu',du:4,duu:'h',ec:0,ecu:'h',repeat:true,max:0,closeWhen:[[C('disp','is','group:c')],[notSt(2)]],from:'2026-09-01',fd:17}),
    R({id:'TR-12',n:'Quote sent · follow-up',when:[[st(8),isOpen()]],waitN:1,waitU:'d',recheck:'daily',ti:'Quote sent follow-up',cl:'fu',du:1,duu:'d',ec:0,ecu:'d',repeat:true,max:0,closeWhen:[[notSt(8)]],from:'2026-09-01',fd:11}),
@@ -1475,8 +1505,8 @@ function tasksOfLine(id){ return S.data.tasks.filter(function(t){return t.line==
    when the attempt ladder runs out (TBD-06: 10 calls, no timing rule, no channel rule). */
 function dead(l){ return l.status==='lost'||l.status==='noapp'||l.status==='disq'||l.status==='withdrawn'||l.status==='unreach'; }
 function openLine(l){ return l.status==='open' && l.stage<SALES_STAGES; }           /* still selling */
-function postLine(l){ return l.status==='open' && l.stage>=SALES_STAGES && l.stage<14; } /* paid, inside the post-purchase ticket */
-function issuedLine(l){ return l.stage===14; }
+function postLine(l){ return l.status==='open' && l.stage>=SALES_STAGES && l.stage<15; } /* paid, inside the post-purchase ticket */
+function issuedLine(l){ return l.stage===15; }
 function isMgrRole(u){ u=u||me(); return !!u && (u.role==='mgr'||u.role==='rmhead'); }
 function rmTeam(headId){ return S.data.users.filter(function(u){return u.role==='rm'&&u.mgr===headId;}); }
 /* [stated 23 Sep] a head works in two views — their own book, or the team's. The switch is global:
@@ -1484,19 +1514,19 @@ function rmTeam(headId){ return S.data.users.filter(function(u){return u.role===
    apply — a line is one record with one owner, whoever is looking at it. */
 function hasViews(u){ u=u||me(); return !!u&&(u.role==='mgr'||u.role==='rmhead'); }
 function teamView(u){ u=u||me(); return hasViews(u)&&S.ui.vw!=='mine'; }
-function scopeIds(u){ u=u||me(); if(!u) return [];
+function scopeIds(u){ u=u||me(); if(!u) return []; if(u.role==='admin') return S.data.users.map(function(x){return x.id;});
   if(!teamView(u)) return [u.id];
   /* [stated 26 Sep · 17.5] Team view is the team, not the head's own book */
   return (u.role==='mgr'?teamOf(u.id):rmTeam(u.id)).map(function(x){return x.id;}); }
 function inScope(uid,u){ return scopeIds(u).indexOf(uid)>=0; }
-function homeRoute(u){ u=u||me(); if(!u) return 'home';
+function homeRoute(u){ u=u||me(); if(!u) return 'home'; if(u.role==='admin') return 'adminhome';
   if(u.role==='mgr') return teamView(u)?'team':'home';
   if(u.role==='rmhead') return teamView(u)?'rmteam':'rmhome';
   return u.role==='rm'?'rmhome':'home'; }
 function stageName(n){ return STAGES[n-1]?STAGES[n-1].s:'?'; }
-function skipped(l,n){ if(l.renews&&n<=2) return true; if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
+function skipped(l,n){ if(l.renews&&n<=2) return true; if(n===9) return isChola(l)||!(acctOf(l)&&acctOf(l).prov); if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
 function routeTx(l){ if(l.renews) return 'Non-DUA · renewal'; return l.rate===null||l.rate===undefined?'Route not known yet':(l.rate?'DUA':(l.routeSwitch?'Non-DUA · switched from DUA':'Non-DUA')); }
-function statusTx(l){ return {open:'Open',park:'Time Pending',lost:'Lost',noapp:'No Appetite',disq:'Disqualified',withdrawn:'Withdrawn',unreach:'Unreachable'}[l.status]||l.status; }
+function statusTx(l){ if(l.status==='open'&&l.stage>=SALES_STAGES) return 'Won'; return {open:'Open',park:'Time Pending',lost:'Lost',noapp:'No Appetite',disq:'Disqualified',withdrawn:'Withdrawn',unreach:'Unreachable'}[l.status]||l.status; }
 function statusTone(l){ return l.status==='open'?'green':(l.status==='park'?'amber':'red'); }
 /* [stated 26 Sep · 2.9] the opportunity name is <account legal name>_<opportunity id>, rendered at read time
    and never stored — so it follows the account's legal name, the rename on verification included. */
@@ -1513,7 +1543,7 @@ function confirmed(l){ return l.stage>=9 && l.status==='open'; }
 function actingParty(l){
   /* [stated 26 Sep · 2.1] waiting-on has three values only — Us, Client, Insurer. Placement, Ops
      and the post-purchase desk are internal, so a line waiting on them waits on Us. */
-  if(dead(l)||l.stage===14) return '—';
+  if(dead(l)||l.stage===15) return '—';
   if(l.status==='park') return 'Client';
   if(l.stage>=SALES_STAGES){ var w=issWaiting(l); return (w==='Client'||w==='Insurer')?w:'Us'; }
   return STAGES[l.stage-1].w;
@@ -1523,8 +1553,9 @@ function waitHow(l){ var w=actingParty(l);
   if(w==='—') return dead(l)?'Closed — nobody is waiting.':'Issued — nothing is outstanding.';
   if(l.status==='park') return 'Time Pending: the client asked us to come back on '+fmtD(l.revisit)+'.';
   if(l.stage===6) return 'Quote Requested: placement is an internal team, so the line waits on Us'+(l.plcQ&&!l.qAns&&l.round===1?' — and placement has a query for you':'')+'.';
-  if(l.stage===9) return l.pay==='ticket'?'Purchase Requested: the payment ticket is with Ops, an internal team — so Us.':(l.pay==='back'?'Purchase Requested: the payment details are back and ours to send.':'Purchase Requested: the payment request is ours to raise.');
+  if(l.stage===10) return l.pay==='ticket'?'Purchase Requested: the payment ticket is with Ops, an internal team — so Us.':(l.pay==='back'?'Purchase Requested: the payment details are back and ours to send.':'Purchase Requested: the payment request is ours to raise.');
   if(l.stage>=SALES_STAGES) return 'Read from the post-purchase ticket'+(l.iss?' '+l.iss.id:'')+': '+(w==='Client'?'a document is with the client.':(w==='Insurer'?'the insurer owes a document.':'the next step is ours — the RM or the desk.'));
+  if(l.stage===9) return 'KYC Details Requested: the client owes PAN and GST — the payment request opens once KYC is in.';
   return stageName(l.stage)+' waits on '+w+' by definition.';
 }
 function waitTone(w){ return w==='Us'?'amber':(w==='Client'?'blue':(w==='Placement'||w==='Ops'||w==='Insurer'||w==='Post-purchase'?'violet':'neutral')); }
@@ -1540,7 +1571,7 @@ function daysQuiet(l){ return daysBetween(lastActivity(l),S.now); }
 function daysInStage(l){ return daysBetween(l.enteredAt,S.now); }
 function workDays(a,b){ return Math.floor(workMins(a,b)/((WH.end-WH.start)*60)); }
 function workDaysInStage(l){ return workDays(l.enteredAt,S.now); }
-var STALL={11:1, 12:5, 13:3};              /* working days in stage */
+var STALL={12:1, 13:5, 14:3};              /* working days in stage */
 var UNCALLED_DAYS=3;                        /* working days a new lead may sit uncalled */
 function stalledPost(l){ var t=STALL[l.stage]; return t!==undefined && workDaysInStage(l)>t; }
 function uncalledLate(l){ return openLine(l) && l.stage===1 && !attempts(l) && workDays(l.assignedAt||l.createdAt,S.now)>=UNCALLED_DAYS; }
@@ -1571,7 +1602,7 @@ function myTasks(uid){ return S.data.tasks.filter(function(t){return t.owner===u
 function escalatedTo(mgrId){ return S.data.tasks.filter(function(t){ if(t.done||taskState(t)!=='esc') return false; var u=userById(t.owner); return u && u.mgr===mgrId; }); }
 
 /* the task engine lives in 14-rules.js: fireRules(l) runs every rule against the line */
-function logAdd(l,t,m,kind,sys){ l.log.unshift({at:S.now,t:t,m:m||uname(S.user),sys:sys?1:0,kind:kind||'note'}); }
+function logAdd(l,t,m,kind,sys){ l.log.unshift({at:S.now,t:t,m:m||actorTag(),sys:sys?1:0,kind:kind||'note'}); }
 function moveStage(l,n,why){
   var from=l.stage; visitsOf(l);
   var cur=l.visits[l.visits.length-1]; if(cur&&!cur.out) cur.out=S.now;
@@ -1610,14 +1641,14 @@ function myTeam(u){ u=u||me(); return S.data.users.filter(function(x){ return x.
 function inMyTeam(uid,u){ var x=userById(uid); u=u||me(); return !!x&&x.mgr===u.id; }
 /* permissions */
 function canTakeOver(l){ var u=me(), o=userById(l.owner); return !!u&&!!o&&o.mgr===u.id&&l.owner!==u.id&&(openLine(l)||postLine(l)||l.status==='park'); }
-function canAct(l){ var u=me(); return !!u && l.owner===u.id && !dead(l); }
+function canAct(l){ var u=me(); return !!u && (u.role==='admin'||l.owner===u.id) && !dead(l); }
 function isMine(l){ var u=me(); return !!u && l.owner===u.id; }
-function readOnlyWhy(l){ var u=me(); if(!u) return '';
+function readOnlyWhy(l){ var u=me(); if(!u) return ''; if(u.role==='admin') return dead(l)?(closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.'):'';
   if(l.owner!==u.id){
     if(l.soldBy===u.id) return 'Sold by you. Owned by '+uname(l.owner)+' since payment — you keep read access.';
     return 'Owned by '+uname(l.owner)+'.'+(canTakeOver(l)?' You can see everything here; to work it, take ownership.':''); }
   if(dead(l)) return closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.';
-  if(l.stage===14) return 'Issued. The policy copy and tax invoice went to the client on the three rails. Renewal is a separate opportunity.'; return ''; }
+  if(l.stage===15) return 'Issued. The policy copy and tax invoice went to the client on the three rails. Renewal is a separate opportunity.'; return ''; }
 /* placement and payment tickets are derived from the line */
 function ticketsOf(l){
   var out=[];
@@ -1655,7 +1686,7 @@ function nextAction(l){
   if(st>=SALES_STAGES) return postNextAction(l);
   if(l.status==='park') return {tone:'neutral',lab:'Time Pending',txt:'Time Pending — revisit on '+fmtD(l.revisit)+' · '+(l.reason||''),why:'The stage is unchanged — still at '+stageName(st)+'. It comes back to Open by itself on the revisit date, or when a call connects.',acts:[['resume','Resume']]};
   if(isChola(l)) return cholaSalesNext(l);
-  switch((st===10&&l.pay!=='shared'&&l.pay!=='paid')?9:st){
+  switch((st===11&&l.pay!=='shared'&&l.pay!=='paid')?10:st){
     case 1: return {tone:'amber',lab:'Next action',txt:'Nobody has spoken to them yet',why:l.inbound?'They came in from the '+(l.src||'website')+' — call them while it is fresh.':'First contact can go straight to discovery if they are ready.',acts:[['ctc',l.inbound?'Call':'First contact'],['call','Log a call manually']]};
     /* [stated 24 Sep · TBD-06] 10 calls is the cap; the tenth no-connect closes the line as Unreachable */
     case 2: var rq2=reqCount(l), on2=reqOnlineN(l); return {tone:'amber',lab:'Next action',txt:on2&&!callsMade(l)?'Answered '+rq2.n+' of '+rq2.m+' online':(rq2.n&&rq2.miss.length?plural(rq2.miss.length,'discovery question')+' left. Call to complete':plural(callsMade(l),'call')+' logged. Reach the decision maker and capture the requirement'),why:(l.inbound&&!callsMade(l)?'Came in from the '+(l.src||'website')+' with the first steps done online — confirm them on the call. ':'')+'Calls are counted per product line. '+(everConnected(l)?'This line has been reached, so the attempt ladder does not apply.':(ATTEMPT_CAP-l.att)+' attempts left before this line closes as Unreachable.'),acts:[['ctc','Call'],['disc','Capture requirement'],['call','Log a call manually']]};
@@ -1690,13 +1721,15 @@ function nextAction(l){
       if(d8>=QUOTE_VALID) return {tone:'red',lab:'Quotes expired',txt:'The quotes on QCR v'+l.round+' expired '+plural(d8-QUOTE_VALID,'day')+' ago',why:'An expired quote cannot be confirmed. '+(l.rate?'Ask the client whether to re-rate.':'Send the QCR back for fresh quotes.'),acts:l.rate?[['rejectAll','Client rejected every quote']]:[['objectQcr','Send the QCR back for revision']]};
       return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d8?plural(d8,'day')+' ago':'today'),why:'QCR v'+l.round+' is with '+(l.contact.n||'the client')+'.'+(l.rate?' If they reject every quote, the line switches to the RFQ route.':''),acts:l.rate?[['confirm','Record client confirmation'],['rejectAll','Client rejected every quote'],['resendQcr','Resend']]:[['confirm','Record client confirmation'],['objectQcr','Send the QCR back for revision'],['resendQcr','Resend']]};
     case 9:
+      return {tone:'red',lab:'KYC pending',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request. The opportunity waits here at KYC Details Requested until the client sends them — a KYC drop-off shows separately from a payment drop-off in the funnel.',acts:[['kyc','Get verified']]};
+    case 10:
       if(a && a.prov) return {tone:'red',lab:'Blocked',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request.',acts:[['kyc','Get verified']]};
       if(l.payQ&&!l.payQ.ans) return {tone:'amber',lab:'Next action',txt:'Ops has a query on '+payRef(l),why:'The ticket is on hold until you answer. The stage does not move.',acts:[['payAnswer','Answer the query'],['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='pre'&&(l.payOld||[]).length&&!(a&&a.prov)) return {tone:'amber',lab:'Next action',txt:'The payment link expired unpaid',why:(l.payOld||[]).slice(-1)[0]+' was closed by Ops. Raise a new request — a ticket is never reopened.',acts:[['pay','Raise a new payment request']]};
       if(l.pay==='ticket') return {tone:'violet',lab:'With Ops',txt:'Payment ticket '+payRef(l)+' with ops',why:'Ops prepares the payment details. They come back here.',acts:[['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details received, not yet sent to the client',why:'Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
       return {tone:'amber',lab:'Next action',txt:'Ready for a payment request',why:'One request can cover several of your lines on the opportunity.',acts:[['pay','Raise payment request']]};
-    case 10: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
+    case 11: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
@@ -1743,25 +1776,189 @@ function search(q){
  *  Shell: sign-in, sidebar, top bar, routing, global event delegation
  * ==================================================================== */
 var SCREENS={}, HANDLERS=[];
+/* ============================= ADMIN ROLE ============================= */
+function actorTag(){ var u=me(); return (u&&u.role==='admin')?('Admin · '+u.n):uname(S.user); }
+function prioTone(p){ return p==='P0'?'red':(p==='P1'?'amber':(p==='P2'?'violet':'neutral')); }
+function adminTile(nav,icon,title,desc){ return '<button class="row" data-nav="'+nav+'" style="width:100%;text-align:left;display:flex;gap:12px;align-items:center;padding:14px 16px;cursor:pointer"><span>'+ic(icon,'ic22')+'</span><span style="flex:1"><b>'+esc(title)+'</b><div class="meta">'+esc(desc)+'</div></span>'+ic('chevright')+'</button>'; }
+
+var INSURER_MASTER=['New India Assurance','Oriental Insurance','United India','Reliance General','ICICI Lombard','Tata AIG','Bajaj Allianz','HDFC Ergo','Future Generali','Cholamandalam'];
+var LA_GROUPS=[
+ {name:'Liability team', products:['Directors & Officers','Professional Indemnity','Commercial General Liability','Product Liability','Cyber Liability','Crime'], users:['Anila','Karan','Thejus'], mgr:'Dhruvil'},
+ {name:'WC & Engineering team', products:['Workmen’s Compensation','Contractors All Risk','Erection All Risk','Contractors Plant & Machinery'], users:['Deepak','Abhishek','Sunny'], mgr:'Mahendra'},
+ {name:'Fire team', products:['Fire & Special Perils','Fire Loss of Profit','Machinery Breakdown','Machinery LOP','Office Package'], users:['Pranay'], mgr:'Pranay'}
+];
+var LP_STAGES=[
+ ['Name, phone, email filled','P3'],['Visited Company field step','P3'],['Company name filled','P3'],['L1 visited','P3'],
+ ['L1 completed','P2'],
+ ['OTP entered','P1'],['View all the available quotes','P1'],['Quote selected by user','P1'],['Entered offline flow (thank-you page)','P1'],
+ ['User details page visited','P0'],['User details submitted in purchase flow','P0'],['Company details page submit','P0'],['KYC documents submitted','P0'],['KYC verified','P0'],['Payment start','P0']
+];
+
+SCREENS.adminhome=function(){
+  var accts=S.data.accounts.filter(function(a){return !a.merged;}).length;
+  var openLn=S.data.lines.filter(function(l){return !dead(l);}).length;
+  var renN=renLines().filter(function(l){return renDue(l);}).length;
+  var tk=ticketRows(me()), tkOpen=tk.filter(function(r){return !r.closed;}).length, tkNeed=tk.filter(function(r){return r.need;}).length;
+  var tsk=S.data.tasks.filter(function(t){return !t.done;}).length;
+  var html='<div class="hdrow"><div><div class="h1">Admin console</div><div class="sub">Full access across every team — all accounts, opportunities, pipeline, renewals, tickets and tasks — plus every master configuration. You act on any record directly; the trail records it as Admin.</div></div></div>'+diamonds()+
+    '<div class="stat mt12">'+
+      '<div class="s"><div class="lbl">Accounts</div><div class="v">'+accts+'</div></div>'+
+      '<div class="s"><div class="lbl">Open lines</div><div class="v">'+openLn+'</div></div>'+
+      '<div class="s"><div class="lbl">Renewals due</div><div class="v'+(renN?' amber':'')+'">'+renN+'</div></div>'+
+      '<div class="s"><div class="lbl">Open tickets</div><div class="v">'+tkOpen+'</div></div>'+
+      '<div class="s"><div class="lbl">Open tasks</div><div class="v">'+tsk+'</div></div>'+
+    '</div>'+
+    '<div class="h4 mt16 mb12">Everything, across every team</div>'+
+    '<div class="card"><div class="rowlist">'+
+      adminTile('pipeline','list','Opportunities','Every opportunity in every team, by stage.')+
+      adminTile('accounts','building','Accounts','Every customer account and its 360.')+
+      adminTile('renewals','refresh','Renewals','Every renewal line across the RM book.')+
+      adminTile('tickets','ticket','Tickets','Placement, payment, issuance, endorsement and claim tickets'+(tkNeed?' · '+tkNeed+' need attention':'')+'.')+
+      adminTile('tasks','checks','Tasks','Every task in the system, whoever owns it.')+
+    '</div></div>'+
+    '<div class="h4 mt16 mb12">Master configuration</div>'+
+    '<div class="card"><div class="rowlist">'+
+      adminTile('rules','settings','Task configurator','Rules that create and close tasks — conditions, timing, escalation.')+
+      adminTile('leadassign','list','Lead assignment','Round-robin groups and value rules for website leads.')+
+      adminTile('leadprio','refresh','Lead prioritisation','P0–P3 priority by the funnel stage a website lead dropped from.')+
+      adminTile('rmalloc','handshake','RM allocation','Which RM owns an account after payment — by GWP/revenue band and region.')+adminTile('rulecfg','settings','Working calendar & checks','Working days, hours, holidays and the hourly/daily rule checks.')+
+      adminTile('masters','building','Reference masters','Products, insurers, sources, reasons, payment modes and fallback users.')+
+    '</div></div>';
+  return {sc:'Admin console', html:html};
+};
+
+SCREENS.masters=function(){
+  var tbl=function(title,head,body){ return '<section class="card" style="overflow:hidden"><div class="cardh"><span class="t">'+esc(title)+'</span></div><div class="tw"><table class="t"><thead><tr>'+head.map(function(h){return '<th>'+esc(h)+'</th>';}).join('')+'</tr></thead><tbody>'+body+'</tbody></table></div></section>'; };
+  var one=function(arr){ return arr.map(function(x){ return '<tr><td>'+esc(x)+'</td></tr>'; }).join(''); };
+  var prod=PRODUCTS.map(function(p){ return '<tr><td class="nm">'+esc(p)+'</td><td>'+esc(CATOF[p])+'</td><td>'+(CONTRACTUAL[p]?chip('Contractual · never renews','violet',false,true):'<span class="meta">Annual · renews</span>')+'</td></tr>'; }).join('');
+  var cats=['Property & casualty','Marine & liability','Employee benefits'];
+  var fb='<tr><td>Property & casualty</td><td>Nikhil Sharma</td><td>Priya Nair</td></tr><tr><td>Marine & liability</td><td>Anand Kulkarni</td><td>Priya Nair</td></tr><tr><td>Employee benefits</td><td>Divya Shah</td><td>Priya Nair</td></tr>';
+  var c=cfg();
+  var html='<div class="hdrow"><div><div class="h1">Masters &amp; configuration</div><div class="sub">Every reference list and routing master the product reads from. The configurable masters open their own screen; the reference lists below are the values in use.</div></div></div>'+diamonds()+
+    '<div class="h4 mt8 mb12">Configurable masters</div>'+
+    '<div class="card"><div class="rowlist">'+
+      adminTile('rules','settings','Task configurator','Rules that create and close tasks.')+
+      adminTile('leadassign','list','Lead assignment','Round-robin groups and value rules.')+
+      adminTile('leadprio','refresh','Lead prioritisation','Priority by funnel drop-off stage.')+
+      adminTile('rmalloc','handshake','RM allocation','Post-payment RM owner by band + region.')+adminTile('rulecfg','settings','Working calendar & checks','Days, hours, holidays, check schedule.')+
+    '</div></div>'+
+    '<div class="h4 mt16 mb12">Reference lists</div>'+
+    tbl('Products',['Product','Category','Type'],prod)+
+    tbl('Product categories',['Category'],one(cats))+
+    tbl('Insurers',['Insurer'],one(INSURER_MASTER))+
+    tbl('Source',['Where the opportunity came from'],one(SRCS))+
+    tbl('Business type',['On the opportunity'],one([BTYPE.fresh,BTYPE.roll]))+
+    tbl('Payment modes',['Mode'],one(PAYMODE))+
+    tbl('Park (Time Pending) reasons',['Reason'],one(PARK))+
+    tbl('Disqualification reasons',['Reason'],one(DISQ))+
+    tbl('Fallback users',['Category','Fallback sales user (fresh)','Fallback RM (existing client)'],fb)+
+    '<div class="mt16">'+note('neutral','Working calendar','Working days Mon–Fri, '+c.ws+':00–'+c.we+':00, with '+plural(c.hol.length,'holiday')+' marked. The daily rule check runs at '+c.dailyH+':00. Open it from Working calendar & checks above.','info')+'</div>'+
+    '<div class="mt12">'+note('violet','Editing','Task rules, the working calendar, lead assignment and lead prioritisation are editable. Inline editing of the reference lists above is the next build.','info')+'</div>';
+  return {sc:'Masters', html:html};
+};
+
+SCREENS.leadassign=function(){
+  var groups=LA_GROUPS.map(function(g){
+    return '<tr><td class="nm">'+esc(g.name)+'<div class="meta">'+g.products.length+' products · '+esc(g.products.join(', '))+'</div></td>'+
+      '<td>'+g.users.map(function(u,j){return (j+1)+'. '+esc(u);}).join('<br>')+'</td>'+
+      '<td>'+esc(g.mgr)+'</td>'+
+      '<td>'+chip('Active','green',false,true)+'</td></tr>';
+  }).join('');
+  var inG={}; LA_GROUPS.forEach(function(g){g.products.forEach(function(p){inG[p]=1;});});
+  var notIn=PRODUCTS.filter(function(p){return !inG[p];});
+  var html='<div class="hdrow"><div><div class="h1">Lead assignment</div><div class="sub">How an inbound website lead is routed to a sales user. Manually created opportunities are not assigned by this master.</div></div></div>'+diamonds()+
+    '<div class="h4 mt8 mb12">Logic 1 · Assignment groups (product-wise round robin)</div>'+
+    '<section class="card" style="overflow:hidden"><div class="tw"><table class="t"><thead><tr><th>Group</th><th>Sales users (in turn)</th><th>Sales manager</th><th>Status</th></tr></thead><tbody>'+groups+
+      (notIn.length?'<tr class="dim"><td class="nm">Not in any group<div class="meta">'+esc(notIn.join(', '))+'</div></td><td colspan="3"><span class="meta">Falls back to the product’s fallback user.</span></td></tr>':'')+
+    '</tbody></table></div></section>'+
+    '<div class="h4 mt16 mb12">Logic 2 · Value rules</div>'+
+    note('neutral','When sum insured and turnover are both given','The lead is routed by value instead of plain round robin: below the product group’s cut-off (Low) it goes to the next sales user in the round robin; at the cut-off and above (High) it goes to the Sales Manager. Parameters: Sum insured / LOI and Annual turnover. A product group with no cut-off always uses Logic 1.','info')+
+    '<div class="mt12">'+note('violet','Editing','This mirrors the standalone Lead Masters prototype. The inline Edit / + New drawers and the “Test a lead” tool are the next build.','info')+'</div>';
+  return {sc:'Lead assignment', html:html};
+};
+
+SCREENS.leadprio=function(){
+  var rows=LP_STAGES.map(function(ss,i){ return '<tr><td class="num">'+(i+1)+'</td><td>'+esc(ss[0])+'</td><td>'+chip(ss[1],prioTone(ss[1]),false,true)+'</td></tr>'; }).join('');
+  var html='<div class="hdrow"><div><div class="h1">Lead prioritisation</div><div class="sub">Priority for website leads, by the funnel stage the visitor dropped from. P0 is highest, P3 lowest. Applies only to website drop-offs that create a product line — not to manually added lines.</div></div></div>'+diamonds()+
+    '<section class="card" style="overflow:hidden"><div class="cardh"><span class="t">Priority by drop-off stage</span></div><div class="tw"><table class="t"><thead><tr><th>#</th><th>Drop-off stage (journey order)</th><th>Priority</th></tr></thead><tbody>'+rows+'</tbody></table></div></section>'+
+    '<div class="mt16">'+note('neutral','Additional rules','Beyond the stage mapping, admins can raise priority by parameters such as sum insured / LOI, annual turnover, product or product group. None are seeded. A rule never lowers the stage priority.','info')+'</div>'+
+    '<div class="mt12">'+note('violet','Editing','This mirrors the standalone Lead Masters prototype. The inline Edit / + New drawers and the “Test priority” tool are the next build.','info')+'</div>';
+  return {sc:'Lead prioritisation', html:html};
+};
+
+/* --------------------------- RM ALLOCATION (post-payment) master --------------------------- */
+var RMA_LEVELS=['RM','SRM','AVP','VP'];
+var RMA_REGIONS=['North','West','South','East','Central','Northeast'];
+var RMA_BANDS=[
+ ['RM','0–1 Lakh','0–2 Cr','0–1 Lakh','0–10 Cr'],
+ ['SRM','1–3 Lakhs','2–15 Cr','1–3 Lakhs','10–20 Cr'],
+ ['AVP','3–7 Lakhs','15–75 Cr','3–7 Lakhs','20–40 Cr'],
+ ['VP','7 Lakhs+','75 Cr+','7 Lakhs+','40 Cr+']
+];
+var RMA_OWNERS=[
+ ['Chaitali Bhattacharya','VP',['North','South']],
+ ['Manoj Jha','VP',['West']],
+ ['Prashant Timothy','AVP',['West']],
+ ['Shubh Bangar','AVP',['North','South']],
+ ['Gaurav Mishra','SRM',['North','South']],
+ ['Narain Kataria','RM',['West']],
+ ['Prithvi Madhusudhanan','RM',['South']],
+ ['Sumit Chand','RM',['North']]
+];
+var RMA_STATEMAP=[
+ ['North','Jammu & Kashmir, Ladakh, Himachal Pradesh, Punjab, Chandigarh, Uttarakhand, Haryana, Delhi (NCT), Uttar Pradesh'],
+ ['West','Rajasthan, Gujarat, Goa, Maharashtra, Dadra & Nagar Haveli and Daman & Diu'],
+ ['South','Andhra Pradesh, Karnataka, Kerala, Tamil Nadu, Telangana, Puducherry, Lakshadweep'],
+ ['East','Bihar, Jharkhand, Odisha, West Bengal, Andaman & Nicobar Islands'],
+ ['Central','Madhya Pradesh, Chhattisgarh'],
+ ['Northeast','Assam, Arunachal Pradesh, Meghalaya, Manipur, Mizoram, Nagaland, Tripura, Sikkim']
+];
+SCREENS.rmalloc=function(){
+  var firstName=function(n){ return n.split(' ')[0]; };
+  var owner=function(region,level){ return RMA_OWNERS.filter(function(o){ return o[1]===level && o[2].indexOf(region)>=0; }).map(function(o){ return firstName(o[0]); }); };
+  var empties=0;
+  var cov=RMA_REGIONS.map(function(r){ return '<tr><td class="nm">'+esc(r)+'</td>'+RMA_LEVELS.map(function(l){ var who=owner(r,l); if(!who.length){ empties++; return '<td>'+chip('— missing','red',false,true)+'</td>'; } return '<td>'+esc(who.join(', '))+(who.length>1?' <span class="meta">(round robin)</span>':'')+'</td>'; }).join('')+'</tr>'; }).join('');
+  var bands=RMA_BANDS.map(function(b){ return '<tr><td>'+chip(b[0],'violet',false,true)+'</td><td>'+esc(b[1])+'</td><td>'+esc(b[2])+'</td><td>'+esc(b[3])+'</td><td>'+esc(b[4])+'</td></tr>'; }).join('');
+  var owners=RMA_OWNERS.map(function(o){ return '<tr><td class="nm">'+esc(o[0])+'</td><td>'+chip(o[1],'violet',false,true)+'</td><td>'+o[2].map(esc).join(', ')+'</td></tr>'; }).join('');
+  var smap=RMA_STATEMAP.map(function(x){ return '<tr><td class="nm">'+esc(x[0])+'</td><td>'+esc(x[1])+'</td></tr>'; }).join('');
+  var html='<div class="hdrow"><div><div class="h1">RM allocation</div><div class="sub">Which relationship manager owns an account after the sale. It runs at Payment Completed, on an account’s first policy only — once an RM is assigned the logic never runs again for that account. Separate from sales lead assignment.</div></div></div>'+diamonds()+
+    note('neutral','How the owner is decided','Each parameter that is present — the payment premium (GWP), net revenue, insurance expense and EB expense — maps to a designation band. The final designation is the highest among the parameters present. The owner is a person at that designation who covers the account’s region (from the State on the account). More than one at the same designation and region → round robin.','info')+
+    '<div class="h4 mt16 mb12">Bands → designation level</div>'+
+    '<section class="card" style="overflow:hidden"><div class="tw"><table class="t"><thead><tr><th>Level</th><th>Active GWP</th><th>Net revenue</th><th>Insurance expense</th><th>EB expense</th></tr></thead><tbody>'+bands+'</tbody></table></div></section>'+
+    '<div class="meta mt8">A band edge falls in the next band — e.g. exactly ₹1 Lakh GWP is SRM, exactly ₹2 Cr revenue is SRM.</div>'+
+    '<div class="h4 mt16 mb12">Owner roster</div>'+
+    '<section class="card" style="overflow:hidden"><div class="tw"><table class="t"><thead><tr><th>Name</th><th>Designation</th><th>Region(s)</th></tr></thead><tbody>'+owners+'</tbody></table></div></section>'+
+    '<div class="h4 mt16 mb12">Coverage · region × designation</div>'+
+    '<section class="card" style="overflow:hidden"><div class="tw"><table class="t"><thead><tr><th>Region</th>'+RMA_LEVELS.map(function(l){return '<th>'+esc(l)+'</th>';}).join('')+'</tr></thead><tbody>'+cov+'</tbody></table></div></section>'+
+    '<div class="mt12">'+note('amber','Gaps','The business sheet leaves '+empties+' designation × region cells empty — East, Central and North-east are uncovered, and West has no SRM. An account that routes to an empty cell has no owner until the names are supplied.','info')+'</div>'+
+    '<div class="h4 mt16 mb12">State → region</div>'+
+    '<section class="card" style="overflow:hidden"><div class="tw"><table class="t"><thead><tr><th>Region</th><th>States / UTs</th></tr></thead><tbody>'+smap+'</tbody></table></div></section>'+
+    '<div class="mt12">'+note('violet','Editing','This mirrors the standalone BimaSetu RM Allocation prototype. The inline Edit drawers and the “Test an account” tool are the next build, with lead assignment and lead prioritisation.','info')+'</div>';
+  return {sc:'RM allocation', html:html};
+};
+
+/* =========================== END ADMIN ROLE =========================== */
+
 var PERSONAS=[
  {id:'nikhil', d:'Owns a book of product lines. Home says what needs him. Works lines, raises tickets, creates opportunities.'},
  {id:'vikram', d:'Sees the whole team and acts on none of it. Closes escalated tasks, takes a line over when someone is away, edits task rules.'},
  {id:'priya',  d:'Owns accounts after the sale: chases the client for the proposal form and mandate, holds the relationship through issuance, raises endorsements and claims — and sells on her own accounts.'},
- {id:'meera',  d:'Head of relationship management. Sees every RM’s post-purchase lines, renewals and service tickets; closes escalations, takes a line over, sets the RM clocks.'}
+ {id:'meera',  d:'Head of relationship management. Sees every RM’s post-purchase lines, renewals and service tickets; closes escalations, takes a line over, sets the RM clocks.'},
+ {id:'admin',  d:'Full access to every account, opportunity, pipeline, renewal, ticket and task across all teams — acts on any record directly — and owns all master configuration: task rules, lead assignment, lead prioritisation and the reference masters.'}
 ];
 /* [stated 23 Sep] a call that has been placed must be dispositioned — its modal has no way out */
 function flowLocked(){ var f=FLOWS[S.flow]; return !!(f&&f.locked&&f.locked()); }
-function navFor(u){
+function navFor(u){ if(u.role==='admin') return [['adminhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['renewals','Renewals',ic('refresh','ic22')],['tickets','Tickets',ic('ticket','ic22')],['tasks','Tasks',ic('checks','ic22')],['masters','Masters',ic('settings','ic22')]];
   /* [stated 23 Sep] My view works the way the executive's does, nav included */
   if(hasViews(u)&&!teamView(u)) return u.role==='rmhead'
-    ? [['rmhome','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]]
-    : [['home','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
-  if(u.role==='mgr') return [['team','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
-  if(u.role==='rm') return [['rmhome','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
+    ? [['rmhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]]
+    : [['home','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
+  if(u.role==='mgr') return [['team','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
+  if(u.role==='rm') return [['rmhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
   /* [stated 24 Sep · TBD-54] the head of RM gets Pipeline in Team view too — her team's
      post-purchase lines were otherwise reachable only through home cards and Tickets */
-  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
-  return [['home','Home',ic('home','ic22')],['pipeline','Pipeline',ic('list','ic22')],['opps','Opportunities',ic('handshake','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
+  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
+  return [['home','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
 }
 function navBadge(v,u){
   if(v==='renewals'){ return renLines(u.id).filter(function(l){ return renDue(l)&&renDays(l)<=7; }).length; }
@@ -1772,7 +1969,7 @@ function navBadge(v,u){
   if(v==='tickets'){ return ticketRows(u).filter(function(r){return r.need;}).length; }
   return 0;
 }
-function activeNav(){ var v=S.route.v, u=me(); if(v==='opp'||v==='opps') return 'opps'; if(v==='home'||v==='rmhome'||v==='team'||v==='rmteam') return homeRoute(u); if(v==='line'||v==='pipeline'){ if(hasViews(u)&&teamView(u)) return homeRoute(u); return 'pipeline'; } if(v==='acct'||v==='accounts'||v==='policy') return 'accounts'; if(v==='ticket'||v==='tickets'||v==='svctix'||v==='svcnew'||v==='svc') return 'tickets'; if(v==='rule'||v==='rules'||v==='rulesim'||v==='rulecfg') return 'rules'; return v; }
+function activeNav(){ var v=S.route.v, u=me(); if(v==='opp'||v==='opps') return 'opps'; if(v==='home'||v==='rmhome'||v==='team'||v==='rmteam') return homeRoute(u); if(v==='line'||v==='pipeline'){ if(hasViews(u)&&teamView(u)) return homeRoute(u); return 'pipeline'; } if(v==='acct'||v==='accounts'||v==='policy') return 'accounts'; if(v==='ticket'||v==='tickets'||v==='svctix'||v==='svcnew'||v==='svc') return 'tickets'; if(v==='masters'||v==='leadassign'||v==='leadprio'||v==='rmalloc') return 'masters'; if(v==='rule'||v==='rules'||v==='rulesim'||v==='rulecfg') return isRole('admin')?'masters':'rules'; return v; }
 
 
 /* [stated 27 Sep] sub-lines are one line; the full text is on hover when it is cut */
@@ -1992,32 +2189,33 @@ SCREENS.pipeline=function(){
   var u=me(), f=S.ui.pf||(isRmRole(u)?'all':'open'), q=(S.ui.pq||'').toLowerCase(), prod=S.ui.pprod||'', st=S.ui.pstage||'';
   /* [stated 23 Sep] scoped by the view switch — own lines, or the team's */
   var lines=S.data.lines.filter(function(l){return inScope(l.owner,u);}), tv=teamView(u);
-  var counts={open:lines.filter(openLine).length, post:lines.filter(postLine).length, issued:lines.filter(issuedLine).length, park:lines.filter(function(l){return l.status==='park';}).length, closed:lines.filter(dead).length, all:lines.length};
-  var rows=lines.filter(function(l){
+  var wonMine=S.data.lines.filter(function(l){return l.soldBy===u.id && l.stage>=SALES_STAGES && !dead(l);});
+  var counts={open:lines.filter(openLine).length, post:lines.filter(postLine).length, issued:lines.filter(issuedLine).length, park:lines.filter(function(l){return l.status==='park';}).length, closed:lines.filter(dead).length, all:lines.length, won:wonMine.length};
+  var rows=(f==='won'?wonMine:lines).filter(function(l){
     if(f==='open'&&!openLine(l)) return false; if(f==='post'&&!postLine(l)) return false; if(f==='issued'&&!issuedLine(l)) return false; if(f==='park'&&l.status!=='park') return false; if(f==='closed'&&!dead(l)) return false;
     if(prod&&l.product!==prod) return false; if(st&&String(l.stage)!==st) return false;
     if(q&&(acctName(l)+' '+l.product+' '+l.id+' '+oppName(l)).toLowerCase().indexOf(q)<0) return false; return true;
   }).sort(function(x,y){ return (y.stage-x.stage)||(webPrioRank(x)-webPrioRank(y))||(daysInStage(y)-daysInStage(x)); });
   var prods=[]; lines.forEach(function(l){ if(prods.indexOf(l.product)<0) prods.push(l.product); });
-  var html='<div class="hdrow"><div><div class="h1">Pipeline</div><div class="sub">'+(tv?'Every product line your team owns.':'Every product line you own.')+'</div></div></div>'+diamonds()+
-    pills('pf',f,[['open','Selling',counts.open],['post','Post-purchase',counts.post],['issued','Issued',counts.issued],['park','Parked',counts.park],['closed','Closed',counts.closed],['all','All',counts.all]])+
+  var html='<div class="hdrow"><div><div class="h1">Opportunities</div><div class="sub">'+(tv?'Every opportunity your team owns.':'Every opportunity you own.')+'</div></div><span class="sp"></span>'+payBtn(lines,u)+'</div>'+diamonds()+
+    pills('pf',f,[['open','Selling',counts.open],['post','Post-purchase',counts.post],['issued','Issued',counts.issued],['won','Won',counts.won],['park','Parked',counts.park],['closed','Closed',counts.closed],['all','All',counts.all]])+
     '<div class="flex wrap mt12" style="gap:10px"><input class="inp" id="pq" data-ui="pq" style="max-width:280px" placeholder="Account, product, line or opportunity" value="'+esc(S.ui.pq||'')+'">'+
       '<select class="sel" data-uisel="pprod" style="max-width:220px"><option value="">All products</option>'+prods.map(function(p){return '<option'+(prod===p?' selected':'')+'>'+esc(p)+'</option>';}).join('')+'</select>'+
       '<select class="sel" data-uisel="pstage" style="max-width:240px"><option value="">All stages</option>'+STAGES.map(function(s){return '<option value="'+s.n+'"'+(st===String(s.n)?' selected':'')+'>'+esc(s.s)+'</option>';}).join('')+'</select>'+
       (q||prod||st?'<button class="btn ghost sm" data-clearpf="1">Clear filters</button>':'')+'</div>'+
-    '<div class="card mt16" style="overflow:hidden">'+(rows.length?'<div class="tw"><table class="t"><thead><tr><th>Line</th><th><span class="f">'+ic('chevdown')+'Stage</span></th><th>Waiting on</th><th>Account</th>'+(tv?'<th>Owner</th>':'')+'<th>Opportunity</th><th class="num">Premium</th><th>In stage</th></tr></thead><tbody>'+
-      rows.map(function(l){ var w=actingParty(l); return '<tr class="row'+(dead(l)?' dim':'')+'" data-go="line" data-id="'+l.id+'"><td class="id">'+esc(l.id)+' '+prioBadge(l)+'<div class="sub" style="color:var(--ink);font-weight:500">'+esc(l.product)+'</div></td>'+
-        '<td>'+chip(stageName(l.stage),l.stage===14?'green':(l.stage>=SALES_STAGES?'violet':(dead(l)?'red':(l.status==='park'?'amber':'neutral'))),true,true)+(l.status!=='open'?'<div class="sub">'+esc(statusTx(l))+'</div>':'')+'</td>'+
-        '<td>'+chip(w,waitTone(w),false,true)+'</td><td class="nm one" title="'+esc(acctName(l))+'">'+esc(shortName(acctName(l)))+'</td>'+(tv?'<td class="one">'+esc(uname(l.owner))+'</td>':'')+'<td class="one">'+esc(l.opp||'Renewal')+'</td><td class="num">'+(confirmed(l)?'<b class="b">'+INR(premOf(l))+'</b>':'<span class="meta">'+INR(premOf(l))+' est.</span>')+'</td>'+
-        '<td>'+(l.stage===14?'—':plural(daysInStage(l),'day'))+'</td></tr>'; }).join('')+'</tbody></table></div>'
+    '<div class="card mt16" style="overflow:hidden">'+(rows.length?'<div class="tw"><table class="t"><thead><tr>'+(S.ui.paymode?'<th style="width:34px"></th>':'')+'<th>Opportunity</th><th><span class="f">'+ic('chevdown')+'Stage</span></th><th>Waiting on</th><th>Account</th>'+(tv?'<th>Owner</th>':'')+'<th class="num">Premium</th><th>In stage</th></tr></thead><tbody>'+
+      rows.map(function(l){ var w=actingParty(l); return '<tr class="row'+(dead(l)?' dim':'')+'" data-go="line" data-id="'+l.id+'">'+(S.ui.paymode?'<td style="text-align:center">'+payChk(l,u)+'</td>':'')+'<td class="id">'+esc(l.id)+' '+prioBadge(l)+'<div class="sub" style="color:var(--ink);font-weight:500">'+esc(l.product)+'</div></td>'+
+        '<td>'+chip(stageName(l.stage),l.stage===15?'green':(l.stage>=SALES_STAGES?'violet':(dead(l)?'red':(l.status==='park'?'amber':'neutral'))),true,true)+((l.status!=='open'||l.stage>=SALES_STAGES)?'<div class="sub">'+esc(statusTx(l))+'</div>':'')+'</td>'+
+        '<td>'+chip(w,waitTone(w),false,true)+'</td><td class="nm one" title="'+esc(acctName(l))+'">'+esc(shortName(acctName(l)))+'</td>'+(tv?'<td class="one">'+esc(uname(l.owner))+'</td>':'')+'<td class="num">'+(confirmed(l)?'<b class="b">'+INR(premOf(l))+'</b>':'<span class="meta">'+INR(premOf(l))+' est.</span>')+'</td>'+
+        '<td>'+(l.stage===15?'—':plural(daysInStage(l),'day'))+'</td></tr>'; }).join('')+'</tbody></table></div>'
       : empty('filter', q||prod||st?'No line matches those filters':'No '+(f==='open'?'selling':(f==='post'?'post-purchase':f))+' lines', q||prod||st?'Clear a filter, or search for the account by name from the sidebar.':'Lines arrive from inbound enquiries, from <b>New opportunity</b>, or by reassignment.', q||prod||st?'<button class="btn" data-clearpf="1">Clear filters</button>':''))+'</div>';
-  return {sc:'Pipeline', html:html};
+  html+=paySelBar(); return {sc:'Opportunities', html:html};
 };
 HANDLERS.push(function(t){ if(t.closest('[data-clearpf]')){ S.ui.pq='';S.ui.pprod='';S.ui.pstage=''; paint(); return true; } return false; });
 
 /* ---------- tasks ---------- */
 SCREENS.tasks=function(){
-  var u=me(), all=S.data.tasks.filter(function(t){return t.owner===u.id;}), cls=S.ui.tcls||'', att=S.ui.tatt||'', rec=S.ui.trec||'', sf=S.ui.tst||'';
+  var u=me(), all=(u.role==='admin'?S.data.tasks.slice():S.data.tasks.filter(function(t){return t.owner===u.id;})), cls=S.ui.tcls||'', att=S.ui.tatt||'', rec=S.ui.trec||'', sf=S.ui.tst||'';
   var esc2=isMgrRole(u)?escalatedTo(u.id):[];
   var pass=function(t){ if(cls&&t.cls!==cls) return false; if(att==='line'&&!t.line) return false; if(att==='acct'&&t.line) return false;
     var l=t.line?lineById(t.line):null; if(rec==='open'&&l&&dead(l)) return false; if(rec==='closed'&&!(l&&dead(l))) return false; if(sf&&!t.done&&taskState(t)!==sf) return false; if(sf&&t.done) return false; return true; };
@@ -2078,12 +2276,12 @@ FLOWS.closeTask={t:'Close an escalated task', sub:'It leaves the owner’s list 
 
 /* ---------- tickets: placement, payment, post-purchase, endorsements and claims — one list ---------- */
 function ticketRows(u){
-  var rows=[], mineLines=function(l){ return l.owner===u.id; };
+  var rows=[], ADMIN=(u.role==='admin'), mineLines=function(l){ return ADMIN||l.owner===u.id; };
   /* [stated 23 Sep] the view switch scopes this list too */
   var scopeLines = hasViews(u)&&!teamView(u) ? mineLines
                  : (u.role==='mgr' ? function(l){ var o=userById(l.owner); return l.owner===u.id||(o&&o.mgr===u.id); }
                  : (u.role==='rmhead' ? function(l){ var o=userById(l.owner); return (o&&o.mgr===u.id)||l.owner===u.id; } : mineLines));
-  var scopeAcct = function(a){ if(!a) return false;
+  var scopeAcct = function(a){ if(!a) return false; if(ADMIN) return true;
     if(hasViews(u)&&!teamView(u)) return a.own===u.id||linesOfAcct(a.id).some(mineLines);
     if(u.role==='rm') return a.own===u.id;
     if(u.role==='rmhead') return a.own===u.id||rmTeam(u.id).some(function(x){return x.id===a.own;});
@@ -2109,7 +2307,7 @@ SCREENS.tickets=function(){
   return {sc:'Tickets', html:html, cta:''};
 };
 FLOWS.raiseReq={t:'Raise a request', sub:'Placement and payment requests are raised from the product line they belong to; endorsements and claims by the account’s RM.', nofoot:function(){return true;},
-  body:function(){ var u=me(), mine=S.data.lines.filter(function(l){return l.owner===u.id&&openLine(l);}), plc=mine.filter(function(l){return l.rate===0&&(l.stage===5||(l.stage===3&&l.rfq&&l.rfq.f&&!rfqCount(l).missing));}), pay=mine.filter(function(l){return l.stage===9&&l.pay==='pre';});
+  body:function(){ var u=me(), mine=S.data.lines.filter(function(l){return l.owner===u.id&&openLine(l);}), plc=mine.filter(function(l){return l.rate===0&&(l.stage===5||(l.stage===3&&l.rfq&&l.rfq.f&&!rfqCount(l).missing));}), pay=mine.filter(function(l){return l.stage===10&&l.pay==='pre';});
     var row=function(title,sub,btn){ return '<div class="row" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><b>'+title+'</b><div class="meta">'+sub+'</div></div>'+btn+'</div>'; };
     return row('Float an RFQ to placement','From a non-DUA line whose RFQ the client verified, or that you filled completely yourself. '+(plc.length?plural(plc.length,'line')+' ready now.':'None ready right now.'),plc.length?'<button class="btn sm primary" data-flow="float" data-line="'+plc[0].id+'">'+esc(acctName(plc[0]))+' · '+esc(plc[0].product)+'</button>':'<button class="btn sm ghost" data-go="pipeline">Pipeline</button>')+
       row('Raise a payment request','From a line at Purchase Requested, once the client has confirmed. '+(pay.length?plural(pay.length,'line')+' ready now.':'None ready right now.'),pay.length?'<button class="btn sm primary" data-flow="pay" data-line="'+pay[0].id+'">'+esc(acctName(pay[0]))+' · '+esc(pay[0].product)+'</button>':'<button class="btn sm ghost" data-go="pipeline">Pipeline</button>')+
@@ -2126,7 +2324,7 @@ function lineTicketOpts(l){
     :(l.stage===3&&rc&&rc.missing?plural(rc.missing,'required RFQ field')+' still empty.'
     :(l.stage===5||l.stage===3?'':'Placement is raised from Details Captured or RFQ Verified.')))));
   out.push({k:'plc',t:'Placement ticket',s:'Float the RFQ to BimaPlacement for quotes',why:plcWhy,btn:'<button class="btn sm primary" data-flow="float" data-line="'+l.id+'">Float to placement</button>'});
-  var payWhy= l.stage<9?'Opens at Purchase Requested, once the client confirms an insurer.':(l.pay!=='pre'||l.stage>9?'Already raised — '+payRef(l)+'.':'');
+  var payWhy= l.stage<10?'Opens at Purchase Requested, once the client confirms an insurer.':(l.pay!=='pre'||l.stage>10?'Already raised — '+payRef(l)+'.':'');
   out.push({k:'pay',t:'Payment ticket',s:'Ask Ops for the payment details for the chosen insurer',why:payWhy,btn:'<button class="btn sm primary" data-flow="pay" data-line="'+l.id+'">Raise payment request</button>'});
   var own=a&&a.own===S.user, issued=p&&!p.issuing;
   var svcWhy= !issued?'Opens once the policy is issued.':(!own?'Raised by '+uname(a.own)+', who owns the account.':'');
@@ -2175,7 +2373,7 @@ SCREENS.search=function(){
 
 /* ---------- not found ---------- */
 SCREENS.notfound=function(){
-  return {sc:'Not found', html:empty('alert','That record isn’t here','It may have been deleted, merged into another account, or the link is wrong. '+(S.route.id?'Nothing has the ID <b>'+esc(S.route.id)+'</b>.':''),'<button class="btn" data-back="1">'+ic('arrowleft')+'Go back</button> <button class="btn ghost" data-nav="'+(isRole('mgr')?'team':(isRole('rm')?'rmhome':(isRole('rmhead')?'rmteam':'home')))+'">Home</button>')};
+  return {sc:'Not found', html:empty('alert','That record isn’t here','It may have been deleted, merged into another account, or the link is wrong. '+(S.route.id?'Nothing has the ID <b>'+esc(S.route.id)+'</b>.':''),'<button class="btn" data-back="1">'+ic('arrowleft')+'Go back</button> <button class="btn ghost" data-nav="'+(isRole('admin')?'adminhome':(isRole('mgr')?'team':(isRole('rm')?'rmhome':(isRole('rmhead')?'rmteam':'home'))))+'">Home</button>')};
 };
 
 /* ==================================================================== *
@@ -2188,7 +2386,7 @@ function stageTrack(l){
      known the steps it skips are removed, not struck through. From Payment Completed: the selling
      phase collapses to one "Sold" block and the RM's post-purchase steps take the bar. */
   var w=actingParty(l), paid=l.stage>=SALES_STAGES;
-  var cap= l.stage===14?'Issued — Policy Copy Sent to Client':(dead(l)?statusTx(l)+' at '+stageName(l.stage):stageName(l.stage)+' · waiting on '+w);
+  var cap= l.stage===15?'Issued — Policy Copy Sent to Client':(dead(l)?statusTx(l)+' at '+stageName(l.stage):stageName(l.stage)+' · waiting on '+w);
   var side= (l.renews&&!paid?'Renewal · ':'')+(paid ? 'Owned by the RM since payment · moved by the post-purchase ticket'+(l.iss?' '+l.iss.id:'')
     : (l.renews ? 'RFQ, then placement — a renewal never goes to the rater'
     : (l.rate===1?'DUA — priced by the rater, no RFQ':(l.rate===0?(l.rfq&&l.rfq.direct?'Non-DUA — floated straight to placement':'Non-DUA — RFQ, then placement'):'DUA or non-DUA is decided when the requirement is captured'))));
@@ -2204,12 +2402,12 @@ function stageTrack(l){
   return head+'<div class="track"><div class="phase soldc"><div class="ph-h">Selling <b>'+esc(seller)+'</b></div>'+
       '<div class="soldblk" title="Selling done"><div class="b"></div><div class="t">'+ic('check','ic14')+'Sold · Payment Completed</div>'+(l.paidAt?'<div class="d">Paid '+esc(fmtD(l.paidAt))+'</div>':'')+'</div></div>'+
     '<div class="hand"><span>→ RM</span><i></i></div>'+
-    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&(s.n===12||s.n===13)); }).map(step).join('')+'</div></div></div></div>';
+    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&(s.n===13||s.n===14)); }).map(step).join('')+'</div></div></div></div>';
 }
 function clockCard(l){
   var w=actingParty(l), d=daysInStage(l), tone= dead(l)?'neutral':(w==='Us'?(d>=QUIET_DAYS?'red':'blue'):(daysQuiet(l)>=QUIET_DAYS?'red':'blue'));
-  if(l.stage===14) tone='green';
-  var head= l.stage===14?'Issued':(dead(l)?statusTx(l):(l.status==='park'?'Parked':plural(d,'day')+' in stage'));
+  if(l.stage===15) tone='green';
+  var head= l.stage===15?'Issued':(dead(l)?statusTx(l):(l.status==='park'?'Parked':plural(d,'day')+' in stage'));
   var pct=Math.min(100,Math.round(d/QUIET_DAYS*100));
   return '<div class="clock '+tone+'"><div class="top"><span>Stage clock</span><span class="own">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span></div>'+
     '<div class="hl">'+esc(head)+'</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
@@ -2236,11 +2434,11 @@ function simsFor(l){
   if(l.stage===3&&l.rate===1) b.push(simbtn('The rater comes back empty — no insurer quotes','data-sim="raterNone" data-line="'+l.id+'"'));
   if(l.stage===6 && !l.plcQ && !l.qAns && l.round===1) b.push(simbtn('Placement raises a query','data-sim="plcQuery" data-line="'+l.id+'"'));
   if(l.stage===6 && (l.qAns||l.round>1||!l.plcQ)){ b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"')); b.push(simbtn('Placement returns: every insurer declined','data-sim="extNone" data-line="'+l.id+'"')); }
-  if(l.stage===9 && l.pay==='ticket') b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"'));
-  if(l.stage===10&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on Chola’s link · policy issued in real time','data-sim="cholaPaid" data-line="'+l.id+'"')); b.push(simbtn('24 hours pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
-  else if(l.stage===10) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
+  if(l.stage===10 && l.pay==='ticket') b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"'));
+  if(l.stage===11&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on Chola’s link · policy issued in real time','data-sim="cholaPaid" data-line="'+l.id+'"')); b.push(simbtn('24 hours pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
+  else if(l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   if(l.stage>=SALES_STAGES) b=b.concat(postSims(l));
-  if((me().role==='exec'||me().role==='rm')&&l.stage<14) b.push(simbtn('Your manager takes this line over','data-sim="extTake" data-line="'+l.id+'"'));
+  if((me().role==='exec'||me().role==='rm')&&l.stage<15) b.push(simbtn('Your manager takes this line over','data-sim="extTake" data-line="'+l.id+'"'));
   if(!b.length) return '';
   return simblock('Simulate an inbound event','Things that happen outside the CRM — a client, placement or Ops acting — faked so the flow can continue.',b.join(''));
 }
@@ -2252,11 +2450,11 @@ function addLineBtn(o,from,cls){ var why=addLineWhy(o); if(why&&/owns a product 
   return why?'<button class="btn '+(cls||'sm')+'" disabled title="'+esc(why)+'">'+ic('plus')+'Add product line</button>'
     :'<button class="btn '+(cls||'sm')+'" data-flow="addLine" data-acct="'+o.acct+'" data-opp="'+o.id+'"'+(from?' data-from="'+from+'"':'')+'>'+ic('plus')+'Add product line</button>'; }
 function zc(title,body,extra){ return '<div class="zc"><div class="zh"><span>'+esc(title)+'</span>'+(extra||'')+'</div>'+body+'</div>'; }
-function statusPill(l){ if(l.status==='open') return chip('Open','green',true,true);
+function statusPill(l){ if(l.status==='open') return chip(l.stage>=SALES_STAGES?'Won':'Open','green',true,true);
   var tx=l.status==='park'?'Time Pending · revisit '+fmtD(l.revisit)+(l.reason?' · '+l.reason:''):closedTx(l);
   return '<span title="'+esc(tx)+'">'+chip(l.status==='park'?'Time Pending':statusTx(l),statusTone(l),true,true)+'</span>'; }
 function lwLeft(l,a,o){
-  var c=l.contact||{}, u=me(), sole=a.sole||(!!a.aad&&!a.gst), sib=o?linesOfOpp(o.id).filter(function(x){return x.id!==l.id;}):renLinesOfAcct(l.acct).filter(function(x){return x.id!==l.id;});
+  var c=l.contact||{}, u=me(), sole=a.sole||(!!a.aad&&!a.gst), sib=o?linesOfAcct(l.acct).filter(function(x){return x.id!==l.id&&!isRen(x);}):renLinesOfAcct(l.acct).filter(function(x){return x.id!==l.id;});
   var acc=zc('Account & contact','<button class="link zname" data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button><div class="zchips">'+(a.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true))+(sole?chip('Sole proprietor','neutral',false,true):'')+'</div>'+
     '<div class="zkv"><span>Contact on this line</span><b>'+esc(c.n||'—')+'</b>'+(c.m||c.e?'<div class="meta">'+esc([c.m,c.e].filter(Boolean).join(' · '))+'</div>':'')+'</div>'+
     '<div class="zkv"><span>Account owner</span><b>'+esc(uname(a.own))+'</b></div>');
@@ -2265,7 +2463,7 @@ function lwLeft(l,a,o){
   var sl=sib.length?sib.map(function(x){ var tag=dead(x)?chip(statusTx(x),'red',false,true):(x.status==='park'?chip('Time Pending','amber',false,true):(x.stage>=9&&x.pay!=='pre'&&x.stage<SALES_STAGES?chip('In '+payRef(x),'violet',false,true):''));
       return '<button class="zsib'+(dead(x)?' dim':'')+'" data-go="line" data-id="'+x.id+'"><b>'+esc(x.product)+'</b><span class="meta">'+esc(stageName(x.stage))+' · '+esc(uname(x.owner))+'</span>'+tag+'</button>'; }).join('')
     :'<div class="meta">'+(o?'The only product line on this opportunity.':'No other renewal lines on this account.')+'</div>';
-  var sibs=zc(o?'Other lines on '+o.id:'Other renewal lines',sl+(o?'<div class="mt8">'+addLineBtn(o,l.id,'sm full')+'</div>':''));
+  var sibs=zc(o?'Other opportunities on this account':'Other renewal opportunities',sl);
   return acc;
 }
 function lwRight(l){
@@ -2297,7 +2495,7 @@ SCREENS.line=function(){
   var body='';
   if(tab==='overview'){
     body='<div class="phhd"><div class="t">Captured at creation</div><div class="a">Line age <b>'+plural(daysBetween(l.createdAt,S.now),'day')+'</b></div></div><div class="kvgrid mt12">'+
-      (o?kv('Opportunity','<button class="link" data-go="opp" data-id="'+o.id+'">'+esc(oName(o))+'</button>')+kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
+      (o?kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
          :kv('Business type','Renewal <span class="meta">· no opportunity — a renewal is a product line on the account</span>'))+(l.renews?renOverview(l):'')+
       kv('Source',esc(l.src||(o?o.src:'')||'—'))+kv('Created',esc(fmtD(l.createdAt)))+
       kv('Calls',plural(callsMade(l),'call')+(l.stage<3&&!everConnected(l)&&l.status==='open'?'<div class="meta">'+(ATTEMPT_CAP-l.att)+' attempts left</div>':''))+
@@ -2316,22 +2514,22 @@ SCREENS.line=function(){
   else if(tab==='manage'){ body=manageTab(l); }
   var w=actingParty(l), p=prio(l);
   var ovf='<details class="ovf"><summary class="btn sm ghost" aria-label="More">'+ic('more','ic16')+'</summary><div class="menu">'+
-    '<button data-copy="1">Copy link to this line</button><button data-go="acct" data-id="'+a.id+'">Open the account</button>'+(o?'<button data-go="opp" data-id="'+o.id+'">Open the opportunity</button>':'')+'<button data-uiset="ltab_'+l.id+'" data-uv="manage">Manage</button></div></details>';
+    '<button data-copy="1">Copy link to this line</button><button data-go="acct" data-id="'+a.id+'">Open the account</button>'+'<button data-uiset="ltab_'+l.id+'" data-uv="manage">Manage</button></div></details>';
   var axes='<div class="axes">'+statusPill(l)+'<span title="'+esc(waitHow(l))+'">'+chip('Waiting on '+w,waitTone(w),false,true)+'</span>'+(p?'<span title="Renewal priority · '+esc(renInTx(renDays(l)))+'">'+prioBadge(l)+'</span>':'')+
-    (dead(l)||l.stage===14?'':chip(plural(daysInStage(l),'day')+' in stage',daysInStage(l)>=QUIET_DAYS?'red':'neutral',false,true))+chip(routeTx(l),l.rate===1?'violet':'neutral',false,true)+(l.renews?renHeadChip(l):'')+'</div>';
-  var banners=(ro?'<div class="banner '+(dead(l)?'red':(l.stage===14?'green':'neutral'))+' mt12">'+ic('lock','ic14')+'<span>'+esc(ro)+'</span></div>':'')+
+    (dead(l)||l.stage===15?'':chip(plural(daysInStage(l),'day')+' in stage',daysInStage(l)>=QUIET_DAYS?'red':'neutral',false,true))+chip(routeTx(l),l.rate===1?'violet':'neutral',false,true)+(l.renews?renHeadChip(l):'')+'</div>';
+  var banners=(ro?'<div class="banner '+(dead(l)?'red':(l.stage===15?'green':'neutral'))+' mt12">'+ic('lock','ic14')+'<span>'+esc(ro)+'</span></div>':'')+
     (isDupMerge(l)?'<div class="banner violet mt12">'+ic('info','ic14')+'<span>This line came across in an account merge and duplicates another one on the same product. It was closed as <b>Disqualified · Duplicate after merge</b>.</span></div>':'')+
     (l.renews&&renPolHit(l)&&renPolHit(l).p.endo>0?'<div class="banner amber mt12">'+ic('alert','ic14')+'<span><b>Endorsed since issue</b> — '+esc(renPolHit(l).p.pno||renPolHit(l).p.id)+' has '+plural(renPolHit(l).p.endo,'completed endorsement')+'. Check them before quoting. <button class="link" data-go="policy" data-id="'+esc(renPolHit(l).p.id)+'">Open the policy</button></span></div>':'')+
     (l.status==='park'?'<div class="banner amber mt12">'+ic('clock','ic14')+'<span><b>Time Pending</b> — revisit '+esc(fmtD(l.revisit))+' · '+esc(l.reason)+'. The stage is untouched. It comes back to Open on that date.</span></div>':'');
-  var html='<div class="lhd"><div class="crumbs"><button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+(o?'<button data-go="opp" data-id="'+o.id+'">'+esc(o.id)+'</button>'+ic('chevright','ic14'):'<span class="b">Renewal</span>'+ic('chevright','ic14'))+'<b>'+esc(l.product)+'</b></div>'+
-    '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(l.product)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span>'+(o?'<span class="sep">·</span><span>'+esc(o.id)+'</span>':'')+'<span class="sep">·</span><span>'+esc(l.id)+'</span></div></div><span class="sp"></span>'+
+  var html='<div class="lhd"><div class="crumbs"><button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+(o?'':'<span class="b">Renewal</span>'+ic('chevright','ic14'))+'<b>'+esc(l.product)+'</b></div>'+
+    '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(l.product)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>'+esc(l.id)+'</span></div></div><span class="sp"></span>'+
       '<div class="acts"><span class="ownchip" title="Owner of this product line">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span>'+(canTakeOver(l)?'<button class="btn sm" data-flow="takeover" data-line="'+l.id+'">Take ownership</button>':'')+(S.data.took.indexOf(l.id)>=0&&isMine(l)?'<button class="btn sm outline" data-flow="handback" data-line="'+l.id+'">Hand back</button>':'')+ovf+'</div></div>'+axes+'</div>'+
     banners+'<div class="mt12">'+stageTrack(l)+'</div>'+
     '<div class="lw mt16"><div class="lz lc">'+
     '<div class="tabs">'+tabs.map(function(t){return '<button data-uiset="ltab_'+l.id+'" data-uv="'+t[0]+'"'+(tab===t[0]?' class="on"':'')+'>'+t[1]+(t[0]==='tasks'&&ltasks.length?' ('+ltasks.length+')':'')+(t[0]==='tickets'&&tks.length?' ('+tks.length+')':'')+'</button>';}).join('')+'</div>'+
     '<div class="pane"><div class="pb">'+panelOr('lw-body',function(){return body;})+'</div></div></div>'+
     '<div class="lside"><div class="lz ll">'+lwLeft(l,a,o)+'<div id="nacard">'+naCard(l)+'</div></div><div class="lz lr">'+lwRight(l)+'</div></div></div>';
-  return {sc:'Product line', ctx:l.id, html:html};
+  return {sc:'Opportunity', ctx:l.id, html:html};
 };
 /* the line's Activity tab — no Log activity button: calls are logged from the call, the rest by the system [F5] */
 function lineActivity(l){ var k='lact_'+l.id, cur=S.ui[k]||'', q=(S.ui['lq_'+l.id]||'').toLowerCase();
@@ -2404,10 +2602,10 @@ function quotesTab(l){
 function manageTab(l){
   var u=me(), o=oppOf(l);
   var rows=[];
-  if(canAct(l)&&l.stage<SALES_STAGES) rows.push(['Change status','Time Pending, or close it as Lost, No Appetite, Disqualified'+(l.stage<=10?' or Withdrawn':'')+'. The stage is preserved either way.','status','Change status']);
+  if(canAct(l)&&l.stage<SALES_STAGES) rows.push(['Change status','Time Pending, or close it as Lost, No Appetite, Disqualified'+(l.stage<=11?' or Withdrawn':'')+'. The stage is preserved either way.','status','Change status']);
   /* [stated 26 Sep · 4.5 · TBD-58] only the owner's manager reassigns, and only inside their own team */
-  if(isMgrRole(u)&&!dead(l)&&l.stage<14&&!isMine(l)) rows.push(inMyTeam(l.owner,u)?['Reassign this product line','Moves this one line to someone in your team. The account owner does not change. Open tasks go with it.','reassign','Reassign']:['Reassign this product line','This line is outside your team.','','','Not yours to move']);
-  else if(isMine(l)&&!dead(l)&&l.stage<14&&!isMgrRole(u)) rows.push(['Reassign this product line','Only '+uname((userById(l.owner)||{}).mgr||'vikram')+' can reassign this line.','','','Manager only']);
+  if(isMgrRole(u)&&!dead(l)&&l.stage<15&&!isMine(l)) rows.push(inMyTeam(l.owner,u)?['Reassign this product line','Moves this one line to someone in your team. The account owner does not change. Open tasks go with it.','reassign','Reassign']:['Reassign this product line','This line is outside your team.','','','Not yours to move']);
+  else if(isMine(l)&&!dead(l)&&l.stage<15&&!isMgrRole(u)) rows.push(['Reassign this product line','Only '+uname((userById(l.owner)||{}).mgr||'vikram')+' can reassign this line.','','','Manager only']);
   if(canTakeOver(l)) rows.push(['Take ownership','For when '+uname(l.owner)+' is away and this cannot wait. You become the owner; the trail records it.','takeover','Take ownership']);
   if(S.data.took.indexOf(l.id)>=0&&isMine(l)) rows.push(['Hand back','Return the line to '+uname(l.prevOwner||'')+', who owned it before you took it.','handback','Hand back']);
   if(l.status==='park'&&isMine(l)) rows.push(['Resume','Take it off Time Pending. The stage never moved.','resume','Resume']);
@@ -2415,7 +2613,7 @@ function manageTab(l){
     (rows.length?rows.map(function(r){ return '<div><div class="bd"><b>'+esc(r[0])+'</b><div class="m">'+esc(r[1])+'</div></div><div class="rt">'+(r[2]?'<button class="btn sm" data-flow="'+r[2]+'" data-line="'+l.id+'">'+esc(r[3])+'</button>':chip(r[4]||'','neutral',false,true))+'</div></div>'; }).join(''):'<div><div class="bd meta">Nothing to manage here — '+esc(readOnlyWhy(l)||'the line is closed')+'</div></div>')+'</div>'+
     (l.iss?diamonds(true)+manageTicketBlock(l):'')+
     diamonds(true)+'<div class="h3">Related</div><div class="rowlist mt8" style="border:1px solid var(--border);border-radius:12px">'+
-    (o?'<div class="row" data-go="opp" data-id="'+o.id+'"><div class="bd"><b>'+esc(oName(o))+'</b><div class="m">'+plural(linesOfOpp(o.id).length,'product line')+' · add a line or raise a payment request across lines there</div></div><div class="rt">'+ic('chevright')+'</div></div>'
+    (o?''
        :'<div class="row" data-uiset="atab_'+l.acct+'" data-uv="ren" data-go="acct" data-id="'+l.acct+'"><div class="bd"><b>Renewals on '+esc(acctName(l))+'</b><div class="m">'+plural(renLinesOfAcct(l.acct).filter(function(x){return !dead(x);}).length,'renewal line')+' · raise a payment request across several of them there</div></div><div class="rt">'+ic('chevright')+'</div></div>')+
     '<div class="row" data-go="acct" data-id="'+l.acct+'"><div class="bd"><b>'+esc(acctName(l))+'</b><div class="m">Account 360 — policies, contacts, KYC</div></div><div class="rt">'+ic('chevright')+'</div></div></div>';
   return h;
@@ -2449,7 +2647,7 @@ function runSim(k,l){
       logAdd(l,'Policy copy generated in real time by Cholamandalam','System · issued on payment · no post-purchase ticket','post',1);
       logAdd(l,'Owner changed from '+uname(l.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · issued in real time','sys',1);
       l.owner=rm; tasksOfLine(l.id).forEach(function(t){ if(!t.done) t.owner=rm; }); if(a) a.own=rm;
-      moveStage(l,11,'Paid on Chola link · policy issued in real time'); }
+      moveStage(l,12,'Paid on Chola link · policy issued in real time'); }
     if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-CHOLA_TTL-1; logAdd(l,'Payment link expired','System · the 24-hour Cholamandalam link lapsed unpaid · regenerate to send a fresh link','sys',1); }
   },'the simulated event');
   if(!ok) return;
@@ -2709,24 +2907,24 @@ FLOWS.confirm={t:'Record client confirmation', sub:'They named an insurer and a 
       (exp?note('amber','These quotes have expired','An expired quote cannot be confirmed. Send the QCR back for fresh quotes.','alert'):note('blue','','Confirmed premium is the revenue number. It is written here and not again.')); },
   repaintOn:[],
   can:function(){return !!S.sel.d&&S.now<=quoteUntil(FL());}, ok:'Confirm',
-  run:function(){ var l=FL(), made=[]; var ok=write(function(){ l.picked=S.sel.d; l.ins=S.sel.d; if(isChola(l)) l.chola={conf:S.now}; logAdd(l,'Client confirmed insurer',uname(S.user)+' · '+S.sel.d,'call'); made=moveStage(l,9,'Client confirmed '+S.sel.d); },'the confirmation'); if(!ok) return 'fail'; toast('Client confirmed '+l.picked,stageToast(l,made)); }};
+  run:function(){ var l=FL(), made=[]; var ok=write(function(){ l.picked=S.sel.d; l.ins=S.sel.d; if(isChola(l)) l.chola={conf:S.now}; logAdd(l,'Client confirmed insurer',uname(S.user)+' · '+S.sel.d,'call'); var _a=acctOf(l),_dest=(isChola(l)||verified(_a))?10:9; made=moveStage(l,_dest,'Client confirmed '+S.sel.d); },'the confirmation'); if(!ok) return 'fail'; toast('Client confirmed '+l.picked,stageToast(l,made)); }};
 
 /* ---------- Cholamandalam real-time issuance (WC · DUA) ---------- */
 function cholaSalesNext(l){
   var ch=l.chola||{}, a=acctOf(l);
-  if(l.stage===9){
+  if(l.stage===10){
     if(!ch.kyc) return {tone:'amber',lab:'Next action',txt:'Run real-time KYC with Cholamandalam',why:'Chola writes Workmen’s Compensation on a live API. Capture the issuance details, upload PAN and GST for OCR, and clear KYC — no payment ticket is raised.',acts:[['cholaKyc','Run KYC with Cholamandalam']]};
     return {tone:'amber',lab:'Next action',txt:'KYC cleared — generate the payment link',why:'Cholamandalam returned KYC success. Generate the live payment link and share it with '+((l.contact||{}).n||'the client')+'. It is valid for 24 hours.',acts:[['cholaLink','Generate payment link']]};
   }
-  if(l.stage===10){
+  if(l.stage===11){
     if(cholaLinkExpired(l)) return {tone:'red',lab:'Link expired',txt:'The payment link expired after 24 hours',why:'The 24-hour Cholamandalam link lapsed unpaid. Regenerate it to send '+((l.contact||{}).n||'the client')+' a fresh link.',acts:[['cholaLink','Regenerate payment link']]};
     return {tone:'blue',lab:'Waiting on the client',txt:'Payment link sent · expires in '+cholaLinkLeft(l)+'h · policy issues on payment',why:'Cholamandalam’s link ('+(ch.link||'')+') is with '+((l.contact||{}).n||'the client')+'. No screenshot and no confirm step — when they pay, Chola issues the policy copy in real time. The link is valid 24 hours.',acts:[['cholaLink','View the link']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
 function cholaPostNext(l){
-  if(l.stage===11) return {tone:'amber',lab:'Next action',txt:'Paid — Cholamandalam issued the policy in real time. Share the copy with the client',why:'The client paid on Chola’s link and the policy copy was generated instantly — no payment ticket and no post-purchase ticket. Share it with '+((l.contact||{}).n||'the client')+' to close the sale.',acts:[['cholaShare','Share the policy copy']]};
-  if(l.stage===14) return {tone:'green',lab:'Issued',txt:'Policy copy shared · issued in real time via Cholamandalam',why:'Chola issued the policy on payment and you shared the copy. No payment ticket and no post-purchase ticket were needed.',acts:[]};
+  if(l.stage===12) return {tone:'amber',lab:'Next action',txt:'Paid — Cholamandalam issued the policy in real time. Share the copy with the client',why:'The client paid on Chola’s link and the policy copy was generated instantly — no payment ticket and no post-purchase ticket. Share it with '+((l.contact||{}).n||'the client')+' to close the sale.',acts:[['cholaShare','Share the policy copy']]};
+  if(l.stage===15) return {tone:'green',lab:'Issued',txt:'Policy copy shared · issued in real time via Cholamandalam',why:'Chola issued the policy on payment and you shared the copy. No payment ticket and no post-purchase ticket were needed.',acts:[]};
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
 function cholaIssue(l){
@@ -2735,7 +2933,7 @@ function cholaIssue(l){
   p.pno=insPolNo(p); p.period=fmtD(S.now)+' – '+fmtD(S.now+365*86400000-86400000); p.issuedAt=S.now;
   a.pols.push(p); l.chola=l.chola||{}; l.chola.policy=p.id;
 }
-function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=10?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Details returned':(l.pay==='shared'?'Shared with client':'Paid'))); }
+function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Details returned':(l.pay==='shared'?'Shared with client':'Paid'))); }
   return '<div class="phhd"><div class="t">Sold</div></div><div class="kvgrid mt12">'+kv('Insurer',esc(l.picked||l.ins||'—'))+kv('Confirmed premium','<b>'+INR(premOf(l))+'</b>')+kv('Payment',esc(payTx))+'</div>'; }
 function docsTab(l){ var a=acctOf(l), p=polOfLine(l), ins=l.picked||l.ins||'the insurer';
   var rows=[docRow('Quote Comparison Report',true,'',{line:l.id},'The quotes the client compared'),
@@ -2801,14 +2999,14 @@ FLOWS.cholaLink={t:function(){ var l=FL(); return (l.chola&&l.chola.link&&!chola
       '<div class="field"><div class="lbl">Payment link</div><div class="flex" style="gap:8px;align-items:center"><input class="inp mono" value="'+esc(link)+'" readonly style="flex:1 1 auto;min-width:0"><button type="button" class="btn sm" data-copy="1">'+ic('copy','ic14')+'Copy link</button></div></div>'+
       (ch.sentAt&&valid?note('green','','Sent to '+esc(ch.sentTo||em||'the client')+' on '+esc(fmt(ch.sentAt))+' · valid for '+cholaLinkLeft(l)+' more hours. The policy issues in real time when they pay.','circlecheck'):note('blue','',(valid?'Valid for '+cholaLinkLeft(l)+' more hours. ':'Valid for 24 hours once sent. ')+(em?'Send payment link emails it to '+esc(em)+' (the contact on this line). ':'')+'The policy issues in real time the moment they pay.','info')); },
   ok:function(){ var l=FL(), ch=l.chola||{}; return (ch.link&&!cholaLinkExpired(l)&&ch.sentAt)?'Resend payment link':'Send payment link'; },
-  run:function(){ var l=FL(), em=(l.contact||{}).e; var regen=!!(l.chola&&l.chola.link&&cholaLinkExpired(l)); var ok=write(function(){ l.chola=l.chola||{}; if(!l.chola.link||cholaLinkExpired(l)){ l.chola.link=cholaLink(l); l.chola.linkAt=S.now; } l.chola.sentAt=S.now; l.chola.sentTo=em||'the client'; logAdd(l,(regen?'Payment link regenerated and sent':'Payment link sent')+' to '+(em||'the client'),'System · email · '+l.chola.link+' · valid 24 hours · no payment ticket','email',1); if(l.stage<10) moveStage(l,10,'Payment link sent to the client'); },'sending the link'); if(!ok) return 'fail'; toast('Payment link sent','Emailed to '+(em||'the client')+'. Valid for 24 hours — the policy issues in real time when they pay.'); }};
+  run:function(){ var l=FL(), em=(l.contact||{}).e; var regen=!!(l.chola&&l.chola.link&&cholaLinkExpired(l)); var ok=write(function(){ l.chola=l.chola||{}; if(!l.chola.link||cholaLinkExpired(l)){ l.chola.link=cholaLink(l); l.chola.linkAt=S.now; } l.chola.sentAt=S.now; l.chola.sentTo=em||'the client'; logAdd(l,(regen?'Payment link regenerated and sent':'Payment link sent')+' to '+(em||'the client'),'System · email · '+l.chola.link+' · valid 24 hours · no payment ticket','email',1); if(l.stage<11) moveStage(l,11,'Payment link sent to the client'); },'sending the link'); if(!ok) return 'fail'; toast('Payment link sent','Emailed to '+(em||'the client')+'. Valid for 24 hours — the policy issues in real time when they pay.'); }};
 FLOWS.cholaShare={t:'Share the policy copy', sub:'Cholamandalam issued it on payment. Send it to the client — there is no QC step and no ticket.', wide:true,
   body:function(){ var l=FL(), p=polOfLine(l);
     return '<div class="flex" style="gap:8px">'+docBtns('Policy copy',{line:l.id})+docBtns('Tax invoice',{line:l.id})+'</div>'+
       '<div class="kvgrid two mt12">'+kv('Insurer',esc(l.picked||l.ins))+kv('Policy number','<span class="mono">'+esc(p?p.pno:'—')+'</span>')+kv('Premium','<b>'+INR(premOf(l))+'</b>')+kv('Sum insured',esc((l.req||{}).si||'—'))+'</div>'+
       note('blue','','Cholamandalam issued the policy copy and tax invoice in real time when the client paid. Sharing sends them to '+esc((l.contact||{}).n||'the client')+' on the three rails and closes the line — no QC and no post-purchase ticket.','info'); },
   ok:'Share policy copy',
-  run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by Cholamandalam · three rails · no post-purchase ticket','post',1); moveStage(l,14,'Policy copy shared with the client'); },'the share'); if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client. Issued in real time — no ticket.'); }};
+  run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by Cholamandalam · three rails · no post-purchase ticket','post',1); moveStage(l,15,'Policy copy shared with the client'); },'the share'); if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client. Issued in real time — no ticket.'); }};
 function cholaWcAcct(){ var l=(S.data.lines||[]).filter(function(x){return x.product===WC_PRODUCT;})[0]; return l?acctOf(l):by(S.data.accounts,'A-1001'); }
 HANDLERS.push(function(t){
   var x=t.closest('[data-cholaback]'); if(x){ S.sel.cstep=Math.max(0,(S.sel.cstep||0)-1); paintModal(); return true; }
@@ -2901,13 +3099,14 @@ FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read
     var nm=(S.sel.ocrname||'').trim(), was=a.n, dup=r==='gst'?S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.gst&&x.gst.toUpperCase()===gst;})[0]:
       S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.pan===pan&&x.aad&&x.aad.replace(/\s/g,'').slice(-4)===aad.replace(/\s/g,'').slice(-4);})[0];
     var ok=write(function(){
-      if(dup){ mergeAccount(a,dup,r); return; }
+      if(dup){ mergeAccount(a,dup,r); if(!dup.prov) linesOfAcct(dup.id).forEach(function(x){ if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified on merge — payment can be requested'); }); return; }
       a.pan=pan; if(gst) a.gst=gst; if(aad) a.aad=aad; a.prov=0; a.kycBy=S.user; a.kycAt=S.now; a.kycHow=r==='gst'?'PAN card and GST certificate uploaded · PAN matched the PAN inside the GSTIN':'PAN card and Aadhaar uploaded · proprietorship, no GST';
       a.kycDocs={pan:S.sel.panname||'PAN card',doc:S.sel.docname||kycSecondName()};
       if(nm&&nm!==a.n){ a.nWas=was; a.n=nm; acctLog(a,'Renamed on verification: '+was+' → '+nm,'System · read by OCR from the PAN card'); }
       acctLog(a,'KYC verified','System · '+a.kycHow+' · uploaded by '+uname(S.user));
       linesOfAcct(a.id).forEach(function(x){
         logAdd(x,'KYC verified','System · '+(r==='gst'?'PAN matched the PAN inside the GSTIN':'PAN and Aadhaar read — proprietorship, no GST')+' · uploaded by '+uname(S.user),'sys',1);
+        if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified — payment can be requested');
       });
     },'the verification');
     if(!ok) return 'fail';
@@ -2952,24 +3151,46 @@ HANDLERS.push(function(t){
 
 /* [stated 23 Sep] one request can cover several lines. For fresh business that is the opportunity's
    lines; a renewal has no opportunity, so it is the account's other renewal lines. */
-function payGroup(l){ return isRen(l)?renLinesOfAcct(l.acct):linesOfOpp(l.opp); }
+function payGroup(l){ return linesOfAcct(l.acct).filter(function(x){ return (isRen(x)?1:0)===(isRen(l)?1:0) && x.owner===l.owner; }); }
 /* [stated 26 Sep · 9.1] from the line: this line only, with Combine with other lines as the way to add more.
    From the opportunity: the selector. Other owners' lines and lines already on a request are named, not selectable.
    No default payment mode. */
-function payRows(l){ var gp=payGroup(l).filter(function(x){ return (x.stage===9||(x.stage===10&&x.pay==='pre'))&&x.status==='open'; });
+function payRows(l){ var gp=payGroup(l).filter(function(x){ return (x.stage===10||(x.stage===11&&x.pay==='pre'))&&x.status==='open'; });
   return gp.map(function(x){ var why=x.pay!=='pre'?'already on '+payRef(x):(x.owner!==S.user?uname(x.owner)+'’s line — requested separately':''); return {l:x,why:why,warn:daysInStage(x)>=QUOTE_VALID?'The confirmed quote may have expired — check it with the insurer first':''}; }); }
-FLOWS.pay={t:'Raise payment request', sub:function(){ var l=FL(); return 'One request can cover several of your lines at Purchase Requested — the client pays one amount.'; },
+/* [12 Oct · Note 41 UI-7.01] Multiple-payment mode */
+function payElig(l,u){ u=u||me(); return !!u&&!!l&&l.owner===u.id&&l.stage===10&&l.status==='open'&&l.pay==='pre'&&!acctOf(l).prov; }
+function payAcctGroups(lines,u){ u=u||me(); var m={}; (lines||[]).forEach(function(l){ if(payElig(l,u)){ var k=l.acct+'|'+(isRen(l)?'r':'f'); (m[k]=m[k]||[]).push(l); } }); return m; }
+function hasMultiPay(lines,u){ var m=payAcctGroups(lines,u); return Object.keys(m).some(function(k){ return m[k].length>=2; }); }
+function paySel(){ return (S.ui.paysel||[]).filter(function(id){ return payElig(lineById(id)); }); }
+function payAnchor(){ var ids=paySel(); if(!ids.length) return null; var l=lineById(ids[0]); return l?{acct:l.acct,ren:isRen(l)}:null; }
+function payCompatible(l){ var a=payAnchor(); return !a||(l.acct===a.acct&&isRen(l)===a.ren); }
+function paySelTotal(){ return paySel().reduce(function(s,id){ var l=lineById(id); return s+(l?premOf(l):0); },0); }
+function payBtn(lines,u){ u=u||me(); if(S.ui.paymode) return ''; var able=hasMultiPay(lines,u);
+  return '<button class="btn sm'+(able?' primary':'')+'" data-paymode="1"'+(able?'':' disabled title="Enable needs 2+ opportunities on one account \u2014 yours, verified, at Purchase Requested, and not yet on a payment request"')+'>'+ic('wallet')+'Multiple payment</button>'; }
+function payChk(l,u){ if(!S.ui.paymode) return '<span style="display:inline-block;width:20px"></span>'; u=u||me();
+  if(!payElig(l,u)) return '<span style="display:inline-block;width:20px"></span>';
+  var on=paySel().indexOf(l.id)>=0, able=on||payCompatible(l);
+  return '<button data-paysel="'+l.id+'"'+(able?'':' disabled')+' title="'+(able?'':'A different account is already selected')+'" style="width:20px;height:20px;padding:0;border-radius:5px;border:1.5px solid '+(on?'var(--violet,#4318D4)':'var(--border,#D6DAE4)')+';background:'+(on?'var(--violet,#4318D4)':'#fff')+';display:inline-flex;align-items:center;justify-content:center;cursor:'+(able?'pointer':'not-allowed')+';opacity:'+(able?'1':'.45')+'">'+(on?'<span style="color:#fff;line-height:1">'+ic('check','ic14')+'</span>':'')+'</button>'; }
+function paySelBar(){ if(!S.ui.paymode) return ''; var ids=paySel(), tot=paySelTotal();
+  return '<div style="position:sticky;bottom:12px;z-index:5;margin-top:14px;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--violet,#4318D4);border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(67,24,212,.16)"><div style="flex:1">'+(ids.length?'<b>'+plural(ids.length,'opportunity').replace('opportunitys','opportunities')+' selected</b> \u00b7 '+INR(tot)+'<span class="meta"> \u00b7 same account \u00b7 same owner \u00b7 Purchase Requested</span>':'<b>Multiple payment</b><span class="meta"> \u00b7 tick the opportunities to pay together \u2014 the first one fixes the account</span>')+'</div><button class="btn sm ghost" data-paycancel="1">Cancel</button><button class="btn sm primary" data-payraise="1"'+(ids.length?'':' disabled')+'>'+ic('wallet')+'Raise payment request</button></div>'; }
+HANDLERS.push(function(t){
+  if(t.closest('[data-paymode]')){ S.ui.paymode=true; S.ui.paysel=[]; paint(); return true; }
+  if(t.closest('[data-paycancel]')){ S.ui.paymode=false; S.ui.paysel=[]; paint(); return true; }
+  var x=t.closest('[data-paysel]'); if(x){ if(x.disabled) return true; var id=x.dataset.paysel, cur=(S.ui.paysel||[]).slice(), i=cur.indexOf(id); if(i>=0) cur.splice(i,1); else cur.push(id); S.ui.paysel=cur; paint(); return true; }
+  if(t.closest('[data-payraise]')){ var ids=paySel(); if(ids.length){ var sv=ids.slice(); S.ui.paymode=false; S.ui.paysel=[]; openFlow('pay',{line:sv[0],comb:'1',l:sv}); } return true; }
+  return false; });
+FLOWS.pay={t:'Raise payment request', sub:function(){ var l=FL(); return 'One request can cover several of your opportunities on this account at Purchase Requested — the client pays one amount.'; },
   repaintOn:['mode'],
   body:function(){ var l=FL(), a=acctOf(l), rows=payRows(l), mine=rows.filter(function(r){return !r.why;});
     if(!S.sel.l) S.sel.l=S.sel.comb?mine.map(function(r){return r.l.id;}):[l.id];
     var sel=mine.filter(function(r){return S.sel.l.indexOf(r.l.id)>=0;}), tot=sel.reduce(function(s,r){return s+premOf(r.l);},0), h='';
     h+=a.prov?note('red','The account is not KYC verified','PAN and GST are needed before a payment request. <button class="btn sm" data-flow="kyc" data-line="'+l.id+'">Get verified</button>','lock'):'';
     if(!S.sel.comb){ var r0=rows.filter(function(r){return r.l.id===l.id;})[0]||{l:l};
-      h+='<div class="kvgrid two">'+kv('Product line',esc(l.product)+' · '+esc(l.picked||l.ins||'—'))+kv('Amount','<b style="font-size:var(--fs-xl)">'+INR(premOf(l))+'</b>')+'</div>'+(r0.warn?note('amber','',esc(r0.warn),'alert'):'')+
-        (mine.length>1?'<button type="button" class="btn sm mt8" data-pcomb="1">'+ic('plus')+'Combine with other lines</button>':'');
+      h+='<div class="kvgrid two">'+kv('Opportunity',esc(l.product)+' · '+esc(l.picked||l.ins||'—'))+kv('Amount','<b style="font-size:var(--fs-xl)">'+INR(premOf(l))+'</b>')+'</div>'+(r0.warn?note('amber','',esc(r0.warn),'alert'):'')+
+        (mine.length>1?'<button type="button" class="btn sm mt8" data-pcomb="1">'+ic('plus')+'Combine with other opportunities</button>':'');
     } else {
       h+=rows.map(function(r){ return opt('data-tog="l" data-tv="'+r.l.id+'"',!r.why&&S.sel.l.indexOf(r.l.id)>=0,r.l.product,(r.why?esc(r.why):esc(r.l.picked||r.l.ins||'—')+' · '+r.l.id)+(r.warn&&!r.why?' · <span class="amber">'+esc(r.warn)+'</span>':''),INR(premOf(r.l)),true,!!r.why); }).join('')+
-        '<div class="flex" style="justify-content:space-between;border-top:1px solid var(--border);padding-top:10px"><span class="meta">'+plural(sel.length,'line')+' selected</span><b style="font-size:var(--fs-xl)">'+INR(tot)+'</b></div>';
+        '<div class="flex" style="justify-content:space-between;border-top:1px solid var(--border);padding-top:10px"><span class="meta">'+plural(sel.length,'opportunity').replace('opportunitys','opportunities')+' selected</span><b style="font-size:var(--fs-xl)">'+INR(tot)+'</b></div>';
     }
     h+='<div class="fgrid">'+field('Business name','<input class="inp" value="'+esc(a.n)+'" disabled>','As on the PAN — the insurer’s receipt carries it.')+field('Payment mode',select('mode',S.sel.mode||'',[['','Choose how the customer will pay']].concat(PAYMODE)))+'</div>'+
       '<div class="fgrid">'+field('PAN card','<input class="inp" value="PAN_'+esc(shortName(a.n).replace(/\s+/g,''))+'.pdf" disabled>')+field('GST certificate','<input class="inp" value="GST_'+esc(a.gst||'')+'.pdf" disabled>')+'</div>';
@@ -2998,7 +3219,7 @@ FLOWS.deskMail={t:'Write to the desk', sub:'On the RM ↔ desk thread of the pos
 FLOWS.status={t:'Change status', sub:'Status sits beside the stage. Time Pending keeps the position; closing preserves how far it got.',
   body:function(){ var l=FL(), canLose=reachedOnce(l), d=S.sel.d; var minD=ymd(S.now);
     var ops=[['park','Time Pending','Alive, deliberately parked. Keeps its stage. Needs a revisit date and a reason'],['lost','Lost','The client did not buy from us. Needs a loss reason'+(canLose?'':' · available once a call has connected')],['noapp','No Appetite','We could not place it. A supply failure, not a competitive loss'],['disq','Disqualified','Should never have been in the pipeline. Needs a reason']];
-    if(l.stage<=10) ops.push(['withdrawn','Withdrawn','The client pulled out before paying. Say why in their words']);
+    if(l.stage<=11) ops.push(['withdrawn','Withdrawn','The client pulled out before paying. Say why in their words']);
     return ops.map(function(x){ return opt('data-pick="'+x[0]+'"',d===x[0],x[1],x[2],'',false,x[0]==='lost'&&!canLose); }).join('')+
       (d==='park'?'<div class="fgrid">'+field('Revisit on','<input class="inp" id="f_rv" data-f="rv" type="date" min="'+minD+'" value="'+esc(S.sel.rv||'')+'">','',S.sel.rv&&S.sel.rv<minD?'Cannot be in the past.':'')+field('Reason',select('rs',S.sel.rs||'',[['','Choose a reason']].concat(PARK)))+'</div>':'')+
       (d==='lost'?field('Loss reason',select('rs',S.sel.rs||'',[['','Choose a reason']].concat(LOSS))):'')+
@@ -3057,15 +3278,16 @@ function oppRow(o){
   return '<div class="row" data-go="opp" data-id="'+o.id+'"><div class="bd"><b>'+esc(oName(o))+'</b> '+chip(st.tx,st.tone,true,true)+'<div class="m2">'+esc(o.id)+' · '+plural(ls.length,'product line')+' · '+esc(o.bt)+' · '+esc(o.src)+' · created '+esc(fmtD(o.created))+(conf?' · <span class="green">'+INR(conf)+' confirmed</span>':'')+'</div></div><div class="rt">'+ic('chevright')+'</div></div>';
 }
 /* payment requests on an opportunity — one per PAY reference, read off the lines */
-function oppPayReqs(o){ var m={}; linesOfOpp(o.id).forEach(function(l){ if(l.pay==='pre'||l.stage<9) return; var r=payRef(l); if(!m[r]) m[r]={ref:r,lines:[],amt:0,by:l.soldBy||l.owner,st:''}; m[r].lines.push(l); m[r].amt+=premOf(l); });
-  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Details returned':(l.pay==='shared'||l.stage===10?'Shared with client':'With Ops')); q.tone=q.st==='Paid'?'green':(q.st==='Details returned'?'amber':'violet'); return q; }); }
+function oppPayReqs(o){ var m={}; linesOfOpp(o.id).forEach(function(l){ if(l.pay==='pre'||l.stage<10) return; var r=payRef(l); if(!m[r]) m[r]={ref:r,lines:[],amt:0,by:l.soldBy||l.owner,st:''}; m[r].lines.push(l); m[r].amt+=premOf(l); });
+  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Details returned':(l.pay==='shared'||l.stage===11?'Shared with client':'With Ops')); q.tone=q.st==='Paid'?'green':(q.st==='Details returned'?'amber':'violet'); return q; }); }
 SCREENS.opp=function(){
   var o=by(S.data.opps,S.route.id); if(!o) return SCREENS.notfound();
+  { var _l=linesOfOpp(o.id)[0]; if(_l){ S.route={v:'line',id:_l.id}; return SCREENS.line(); } }
   var a=acctOf(o.acct), u=me(); if(!canSeeAcct(a,u)) return noAccess('opportunity');
   var ls=linesOfOpp(o.id).sort(function(x,y){ return (dead(x)?1:0)-(dead(y)?1:0)||y.stage-x.stage; }), st=oppStatus(o);
   var conf=ls.filter(confirmed).reduce(function(s,l){return s+premOf(l);},0), est=ls.filter(function(l){return (openLine(l)||l.status==='park')&&!confirmed(l)&&premOf(l);}).reduce(function(s,l){return s+premOf(l);},0);
   var mineOn=ls.some(function(l){return l.owner===u.id;});
-  var elig=ls.filter(function(l){return l.stage===9&&l.status==='open'&&l.pay==='pre';}), myElig=elig.filter(function(l){return l.owner===u.id;}), others=elig.filter(function(l){return l.owner!==u.id;});
+  var elig=ls.filter(function(l){return l.stage===10&&l.status==='open'&&l.pay==='pre';}), myElig=elig.filter(function(l){return l.owner===u.id;}), others=elig.filter(function(l){return l.owner!==u.id;});
   var reqs=oppPayReqs(o), prov=a.prov;
   var payWhy=prov?'The account is not KYC verified — PAN and GST are needed first.':(!myElig.length?(others.length?'None of the lines at Purchase Requested are yours.':'No line of yours is at Purchase Requested yet.'):'');
   var otherNames=others.map(function(l){return uname(l.owner);}).filter(function(v,i,arr){return arr.indexOf(v)===i;});
@@ -3140,7 +3362,7 @@ SCREENS.opps=function(){
         var sum=ls.length?open.map(function(l){return esc(l.product.split(' ')[0].replace(/’s$/,''))+' — '+esc(STAGES[l.stage-1].t);}).slice(0,4).join(', ')+(open.length>4?', +'+(open.length-4)+' more':'')+(won.length?(open.length?', ':'')+won.length+' won':''):'<span class="meta">no lines yet</span>';
         return '<tr class="row'+(s.tx==='Closed'?' dim':'')+'" data-go="opp" data-id="'+o.id+'"><td class="nm one" style="max-width:250px" title="'+esc(oName(o))+'">'+esc(oName(o))+'<div class="sub">'+esc(o.id)+' · '+esc(o.src)+'</div></td><td>'+chip(s.tx,s.tone,true,true)+'</td><td class="one" title="'+esc(a?a.n:o.acct)+'">'+esc(a?shortName(a.n):o.acct)+(a&&a.prov?'<div class="sub">provisional</div>':'')+'</td><td style="white-space:nowrap">'+esc(o.type)+'<div class="sub">'+esc(o.bt)+'</div></td><td><b>'+ls.length+'</b></td><td class="num">'+(conf?'<b class="b">'+INR(conf)+'</b>':'<span class="meta">—</span>')+'</td><td style="white-space:nowrap">'+esc(fmtD(o.created))+'<div class="sub">'+esc(o.by==='system'?'inbound':uname(o.by))+'</div></td></tr>'; }).join('')+'</tbody></table></div>'
       : empty('handshake', q?'No opportunity matches':'No opportunities here', q?'Try the account name or the opportunity ID.':(f==='mine'?'You get one when you create it, or when a line on it is yours.':'Opportunities arrive from inbound enquiries or New opportunity.'), q?'<button class="btn" data-clearof="1">Clear</button>':''))+'</div>';
-  return {sc:'Opportunities', html:html};
+  html+=paySelBar(); return {sc:'Opportunities', html:html};
 };
 HANDLERS.push(function(t){ if(t.closest('[data-clearof]')){ S.ui.oq=''; paint(); return true; } return false; });
 
@@ -3294,7 +3516,7 @@ FLOWS.editContact={t:'Edit contact', sub:'Changes the contact on the account. Li
   run:function(){ var a=by(S.data.accounts,S.sel.acct), c=a&&a.con[+S.sel.ci]; if(!c) return 'fail'; var was=c.n; var ok=write(function(){ c.n=S.sel.n.trim(); c.d=(S.sel.d||'').trim(); c.m=(S.sel.m||'').trim(); c.e=(S.sel.e||'').trim();
       S.data.lines.forEach(function(l){ if(l.acct===a.id&&l.contact.n===was){ l.contact={n:c.n,e:c.e,m:c.m}; } }); acctLog(a,'Contact edited: '+c.n,uname(S.user)); },'the contact'); if(!ok) return 'fail'; toast('Contact saved',''); }};
 FLOWS.depContact={t:'Deactivate this contact', sub:'For someone who has left. They stay on every activity they appear in and are still found by search, marked inactive.',
-  body:function(){ var a=by(S.data.accounts,S.sel.acct), c=a&&a.con[+S.sel.ci]; var ls=S.data.lines.filter(function(l){ return l.acct===a.id&&l.contact.n===(c&&c.n)&&!dead(l)&&l.stage<14; });
+  body:function(){ var a=by(S.data.accounts,S.sel.acct), c=a&&a.con[+S.sel.ci]; var ls=S.data.lines.filter(function(l){ return l.acct===a.id&&l.contact.n===(c&&c.n)&&!dead(l)&&l.stage<15; });
     return note('amber','','<b>'+esc(c?c.n:'')+'</b> is dimmed and marked <b>left</b>. They cannot be picked as the contact on a new line.'+(ls.length?' They are still the contact on '+plural(ls.length,'open line')+' — change it on the line.':''),'info'); },
   can:function(){return true;}, ok:'Deactivate',
   run:function(){ var a=by(S.data.accounts,S.sel.acct), c=a&&a.con[+S.sel.ci]; if(!c) return 'fail'; var ok=write(function(){ c.dep=1; acctLog(a,'Contact deactivated: '+c.n,uname(S.user)+' · left the company'); },'the contact'); if(!ok) return 'fail'; toast('Deactivated',c.n+' is marked as left.'); }};
@@ -3335,26 +3557,24 @@ SCREENS.acct=function(){
       '';
   } else if(tab==='opps'){
     /* [stated 26 Sep · 1.7] each opportunity row opens out to its lines, with stage and owner */
-    body='<div class="phhd"><div class="t">Opportunities</div><div class="a">'+plural(opps.length,'opportunity').replace('opportunitys','opportunities')+'</div></div><div class="mt12">'+(opps.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+opps.sort(function(x,y){return y.created-x.created;}).map(function(o){ var st=oppStatus(o), lns=linesOfOpp(o.id), conf=lns.filter(confirmed).reduce(function(s,l){return s+premOf(l);},0);
-        return '<details class="orow"><summary><div class="bd"><b>'+esc(oName(o))+'</b> '+chip(st.tx,st.tone,true,true)+'<div class="m2">'+esc(o.type)+' · '+esc(o.bt)+' · '+plural(lns.length,'line')+(conf?' · <span class="green">'+INR(conf)+' confirmed</span>':'')+'</div></div><span class="rf-open">Lines</span><button class="btn sm ghost" data-go="opp" data-id="'+o.id+'">Open</button></summary>'+
-          '<div class="rowlist">'+lns.map(function(l){ return '<div class="row'+(dead(l)?' dim':'')+'" data-go="line" data-id="'+l.id+'"><div class="bd"><b>'+esc(l.product)+'</b> '+chip(stageName(l.stage),dead(l)?'red':'neutral',true,true)+(l.status!=='open'?' '+chip(statusTx(l),statusTone(l),false,true):'')+'<div class="m2">'+esc(l.id)+' · '+esc(uname(l.owner))+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'; }).join('')+'</div></details>'; }).join('')+'</div>':empty('list','Nothing here yet','An account can exist before any sale — a provisional account from an enquiry, or a client handed over at payment.'))+'</div>'+
-      (seesRen&&renLines.length?'<div class="meta mt8">A renewal creates no opportunity — the '+plural(renLines.length,'renewal line')+' on this account '+(renLines.length===1?'sits':'sit')+' on the <b>Renewals</b> tab.</div>':'');
+    var accOpps=ls.filter(function(x){return !isRen(x);}).sort(function(x,y){ return (dead(x)?1:0)-(dead(y)?1:0)||y.stage-x.stage||(y.createdAt||0)-(x.createdAt||0); });
+    body='<div class="phhd"><div class="t">Opportunities</div><div class="a">'+plural(accOpps.length,'opportunity').replace('opportunitys','opportunities')+'</div><span class="sp"></span>'+payBtn(accOpps,me())+'</div><div class="mt12">'+(accOpps.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+accOpps.map(function(l){ var o=by(S.data.opps,l.opp); return '<div class="row'+(dead(l)?' dim':'')+'" style="display:flex;align-items:center;gap:10px">'+(S.ui.paymode?'<div style="padding-left:4px">'+payChk(l)+'</div>':'')+'<div class="bd" data-go="line" data-id="'+l.id+'" style="cursor:pointer;flex:1"><b>'+esc(l.product)+'</b> '+chip(stageName(l.stage),l.stage===15?'green':(l.stage>=SALES_STAGES?'violet':(dead(l)?'red':(l.status==='park'?'amber':'neutral'))),true,true)+((l.status!=='open'&&l.status!=='park')||(l.status==='open'&&l.stage>=SALES_STAGES)?' '+chip(statusTx(l),statusTone(l),false,true):'')+'<div class="m2">'+esc(l.id)+' \u00b7 '+esc(o?o.bt:'Renewal')+' \u00b7 '+esc(uname(l.owner))+(confirmed(l)?' \u00b7 <span class="green">'+INR(premOf(l))+'</span>':(premOf(l)?' \u00b7 <span class="meta">~'+INR(premOf(l))+'</span>':''))+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'; }).join('')+'</div>':empty('list','Nothing here yet','An account can exist before any sale \u2014 a provisional account from an enquiry, or a client handed over at payment.'))+paySelBar()+'</div>'+(seesRen&&renLines.length?'<div class="meta mt8">The '+plural(renLines.length,'renewal opportunity').replace('opportunitys','opportunities')+' on this account '+(renLines.length===1?'is':'are')+' on the <b>Renewals</b> tab.</div>':'');
   } else if(tab==='ren'){
     var renRows=renLines.slice().sort(function(x,y){ var p=renPolHit(x), q=renPolHit(y); return (p?p.p.exp:0)-(q?q.p.exp:0); });
-    var payable=renRows.filter(function(l){return l.stage===9&&l.status==='open'&&l.pay==='pre'&&l.owner===u.id;});
+    var payable=renRows.filter(function(l){return l.stage===10&&l.status==='open'&&l.pay==='pre'&&l.owner===u.id;});
     var sel=S.ui['rsel_'+a.id]||[]; sel=sel.filter(function(id){return payable.some(function(l){return l.id===id;});});
     var selTot=sel.reduce(function(t,id){return t+premOf(lineById(id));},0);
     body='<div class="phhd"><div class="t">Renewals</div><div class="a">'+plural(renRows.length,'renewal line')+'</div></div>'+
       '<div class="mt12">'+(renRows.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+renRows.map(function(l){
         var pol=renPolHit(l), can=payable.indexOf(l)>=0, on=sel.indexOf(l.id)>=0, w=actingParty(l);
-        var why_=l.stage===9&&l.status==='open'?(l.pay!=='pre'?'already on '+payRef(l):(l.owner!==u.id?uname(l.owner)+'’s line — requested separately':'')):'';
+        var why_=l.stage===10&&l.status==='open'?(l.pay!=='pre'?'already on '+payRef(l):(l.owner!==u.id?uname(l.owner)+'’s line — requested separately':'')):'';
         var meta=esc(l.id)+' · '+esc(uname(l.owner))+' · waiting on '+esc(w);
         if(pol) meta+=' · renews '+esc(pol.p.pno||pol.p.bkno||'')+' · due <b'+(calDays(S.now,pol.p.exp)<=7?' class="red"':'')+'>'+esc(fmtD(pol.p.exp))+'</b>';
         return '<div class="row'+(on?' on':'')+'" data-go="line" data-id="'+l.id+'"><div class="bd"><b>'+esc(l.product)+'</b> '+prioBadge(l)+' '+chip(stageName(l.stage),l.stage>=SALES_STAGES?'green':(dead(l)?'red':'neutral'),true,true)+'<div class="m2">'+meta+'</div>'+(why_?'<div class="m2 meta">'+esc(why_)+'</div>':'')+'</div>'+
           '<div class="rt">'+(can?'<button class="btn sm'+(on?' primary':' ghost')+'" data-rentog="'+l.id+'" data-acct="'+a.id+'">'+ic(on?'check':'plus')+(on?'Selected':'Select')+'</button>':'')+ic('chevright')+'</div></div>';
       }).join('')+'</div>'
         :empty('refresh','Nothing here yet','A renewal line opens by itself 90 days before a policy expires, on the account’s RM.'))+'</div>'+
-      (payable.length?'<div class="flex wrap mt12" style="gap:10px;align-items:center"><span class="meta">'+(sel.length?plural(sel.length,'line')+' selected · <b style="color:var(--ink)">'+INR(selTot)+'</b>':plural(payable.length,'line')+' at Purchase Requested — tick the ones to bill together')+'</span><span class="sp"></span>'+
+      (payable.length?'<div class="flex wrap mt12" style="gap:10px;align-items:center"><span class="meta">'+(sel.length?plural(sel.length,'opportunity').replace('opportunitys','opportunities')+' selected · <b style="color:var(--ink)">'+INR(selTot)+'</b>':plural(payable.length,'line')+' at Purchase Requested — tick the ones to bill together')+'</span><span class="sp"></span>'+
         (sel.length?'<button class="btn ghost sm" data-renclear="'+a.id+'">Clear</button>':'')+
         '<button class="btn primary sm"'+(sel.length?' data-flow="pay" data-line="'+sel[0]+'"':' disabled title="Select at least one renewal line"')+'>'+ic('plus')+'Raise payment request</button></div>':'')+
       note('neutral','','A renewal never creates an opportunity — it is a product line on this account, carrying the policy it renews. One payment request can cover several of them. Sales does not see this section.','info');
@@ -3409,7 +3629,7 @@ SCREENS.acct=function(){
     '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(a.n)+'</div>'+
       '<div class="metaline"><span>'+esc(a.id)+'</span><span class="sep">·</span>'+(a.prov?chip('Provisional','amber',true,true):'<span title="'+esc(kycLine(a))+'">'+chip('Verified','green',true,true)+'</span>')+(a.rel?chip(a.rel,'neutral',false,true):'')+keys+'</div>'+
       '<div class="metaline one"><span>'+esc(a.city||'—')+'</span><span class="sep">·</span><span>Owner <b class="b">'+esc(uname(a.own))+'</b></span>'+(sharePan.length?'<span class="sep">·</span><span title="Same PAN, '+plural(sharePan.length+1,'account')+'">Group of '+(sharePan.length+1)+'</span>':'')+'</div></div><span class="sp"></span>'+
-      '<div class="acts">'+(isMgrRole(u)&&inMyTeam(a.own,u)?'<button class="btn sm" data-flow="acctReassign" data-acct="'+a.id+'">Reassign</button>':'')+(a.prov&&onAcct(a,u)?'<button class="btn sm primary" data-flow="kyc" data-acct="'+a.id+'" data-line="">'+ic('shield')+'Get verified</button>':'')+'<button class="btn sm" data-flow="newOpp">'+ic('plus')+'New opportunity</button></div></div>'+
+      '<div class="acts">'+(isMgrRole(u)&&inMyTeam(a.own,u)?'<button class="btn sm" data-flow="acctReassign" data-acct="'+a.id+'">Reassign</button>':'')+(a.prov&&onAcct(a,u)?'<button class="btn sm primary" data-flow="kyc" data-acct="'+a.id+'" data-line="">'+ic('shield')+'Get verified</button>':'')+'<button class="btn sm" data-flow="newOpp" data-acct="'+a.id+'">'+ic('plus')+'New opportunity</button></div></div>'+
     (a.prov?'<div class="banner amber mt12">'+ic('alert','ic14')+'<span><b>Provisional</b> — '+(a.pan||a.gst?'PAN and GST documents not uploaded.':'no PAN or GST yet.')+' Needed before payment.</span><span class="sp"></span>'+(onAcct(a,u)?'<button class="btn sm" data-flow="kyc" data-acct="'+a.id+'" data-line="">Get verified</button>':'')+'</div>'
       :'')+
     (sole?'<div class="banner neutral mt12">'+ic('info','ic14')+'<span><b>Sole proprietor</b> — PAN + Aadhaar, no GST.</span></div>':'')+
@@ -3494,7 +3714,7 @@ function newOppState(){ var e=newOppErr(), gst=noVal('gst').toUpperCase(), m=e.g
   else if(locked) hint='<span class="nomatch on">'+ic('circlecheck','ic14')+'<b>'+esc(m.a.n)+'</b> · '+esc(m.a.id)+' · '+esc(m.a.city||'—')+' · owner '+esc(uname(m.a.own))+' · '+(m.a.prov?'Provisional':'Verified')+'</span>';
   else hint='<span class="meta">No account carries this GSTIN. A new account will be created.</span>';
   return {e:e, m:m, locked:locked, name:locked?m.a.n:'', hint:hint, warn:locked?openProductWarn(m.a,S.sel.product):''}; }
-FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportunity'; }, sub:function(){ return S.sel.done?'':'GSTIN first — it finds the company if it is already here. With no GSTIN, a provisional account is created with the opportunity.'; }, wide:true,
+FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportunity'; }, sub:function(){ return S.sel.done?'':(S.sel.acct?'On the selected account — just the product, business type and source.':'GSTIN first — it finds the company if it is already here. With no GSTIN, a provisional account is created with the opportunity.'); }, wide:true,
   repaintOn:['product','src'],
   nofoot:function(){ return !!S.sel.done; },
   body:function(){
@@ -3502,11 +3722,20 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
       /* [stated 26 Sep · 3.1 §7] four lines, Open the account, and a single Done */
       return '<dl class="kvlist" style="grid-template-columns:140px 1fr;row-gap:12px">'+
         '<dt>Account</dt><dd>'+esc(a.n)+' <span class="meta">· '+esc(a.id)+' · '+(d.newAcct?'new, ':'matched on GSTIN, ')+(a.prov?'provisional':'verified')+'</span></dd>'+
-        '<dt>Opportunity</dt><dd>'+esc(oName(o))+'</dd>'+
-        '<dt>Product line</dt><dd>'+esc(l.product)+' <span class="meta">· '+esc(l.id)+' · New Lead</span></dd>'+
+                '<dt>Opportunity</dt><dd>'+esc(l.product)+' <span class="meta">· '+esc(l.id)+' · New Lead</span></dd>'+
         '<dt>Owner</dt><dd>'+esc(uname(l.owner))+(l.owner===S.user?' <span class="meta">· you</span>':'')+'</dd></dl>'+
         '<div class="flex wrap mt16"><span class="sp"></span><button class="btn" data-go="acct" data-id="'+a.id+'">Open the account</button><button class="btn primary" data-go="line" data-id="'+l.id+'">Done</button></div>';
     }
+    if(S.sel.acct){ var AA=by(S.data.accounts,S.sel.acct);
+      if(AA){ var act=AA.con.filter(function(c){return !c.dep;});
+        if(S.sel.con===undefined) S.sel.con=act[0]?act[0].n:'';
+        var awarn=S.sel.product?openProductWarn(AA,S.sel.product,''):'';
+        return '<div class="kvgrid">'+kv('Account','<b>'+esc(AA.n)+'</b> '+(AA.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true)))+'</div>'+
+          field('Contact for this opportunity', act.length?select('con',S.sel.con,act.map(function(c){return [c.n,c.n+(c.d?' · '+c.d:'')];})):'<div class="meta">No active contacts — add one on the account first.</div>','The RFQ and payment details go to this person.')+
+          '<label class="field"><div class="lbl">Product</div>'+select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS))+'<div class="hint amber">'+esc(awarn)+'</div></label>'+
+          '<div class="field"><div class="lbl">Business type</div><div class="fgrid">'+opt('data-mset="bt" data-mval="fresh"',S.sel.bt==='fresh','Fresh','Buying this cover for the first time')+opt('data-mset="bt" data-mval="roll"',S.sel.bt==='roll','Market rollover','Moving an existing policy from another broker or insurer')+'</div></div>'+
+          field('Source',select('src',S.sel.src||'',[['','Choose a source']].concat(SRCS)));
+      } }
     var st=newOppState();
     var bt=S.sel.bt;
     return field('GSTIN',input('gst',S.sel.gst,'29AAACS1234F1Z5','style="text-transform:uppercase"'),'','')+
@@ -3526,10 +3755,16 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
     if(g('h_name')) g('h_name').textContent=st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.';
     if(g('h_prod')) g('h_prod').textContent=st.warn;
     [['f_m',st.e.m],['f_e',st.e.e]].forEach(function(x){ var el=g(x[0]); if(!el) return; var lab=el.closest('.field'); if(!lab) return; var er=lab.querySelector('.err'); if(x[1]){ if(!er){ er=document.createElement('div'); er.className='err'; lab.appendChild(er); } er.textContent=x[1]; } else if(er) er.remove(); }); },
-  can:function(){ if(S.sel.done) return false; var gst=noVal('gst').toUpperCase(); if(gstErr(gst)) return false; var m=matchAcct('',gst);
+  can:function(){ if(S.sel.done) return false; if(S.sel.acct){ var _AA=by(S.data.accounts,S.sel.acct); return !!_AA&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt&&!!S.sel.con; } var gst=noVal('gst').toUpperCase(); if(gstErr(gst)) return false; var m=matchAcct('',gst);
     var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&!!noVal('cn')&&digits(noVal('m')).length>=10&&!!noVal('e')&&!emailErr(noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
-  ok:function(){ var m=matchAcct('',noVal('gst')); return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
-  run:function(){ var gst=noVal('gst').toUpperCase(), m=matchAcct('',gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
+  ok:function(){ if(S.sel.acct){ return 'Create on '+S.sel.acct; } var m=matchAcct('',noVal('gst')); return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
+  run:function(){ if(S.sel.acct){ var aa=by(S.data.accounts,S.sel.acct); if(!aa) return 'fail'; var rr={};
+      var ok2=write(function(){ var c=aa.con.filter(function(x){return x.n===S.sel.con&&!x.dep;})[0]||aa.con[0]||{n:'',e:'',m:''};
+        var oo={id:newOppId(),acct:aa.id,type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user,log:[]}; S.data.opps.push(oo); oppLog(oo,'Opportunity created',uname(S.user)+' · '+S.sel.src+' · '+BTYPE[S.sel.bt]);
+        var l=newLine({opp:oo.id,acct:aa.id,product:S.sel.product,owner:S.user,src:S.sel.src,contact:c,how:uname(S.user)+' · New opportunity'}); oppLog(oo,'Product line added: '+l.product,'by '+uname(S.user)); fireRules(l,'stage',1);
+        rr={acct:aa.id,opp:oo.id,line:l.id,newAcct:false}; },'the opportunity');
+      if(!ok2) return 'fail'; S.sel={done:rr}; paint(); toast('Opportunity created','On '+aa.n+'. The opportunity is yours.'); return 'stay'; }
+    var gst=noVal('gst').toUpperCase(), m=matchAcct('',gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
     var ok=write(function(){
       if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); }
       var c=conMatch(a,{n:noVal('cn'),m:noVal('m'),e:noVal('e')});
@@ -3904,9 +4139,9 @@ function tkTrail(t){
 function tkSims(t){
   var l=t.line, b=[]; if(!canAct(l)||dead(l)) return '';
   if(t.ty==='Placement'&&l.stage===6&&(l.qAns||l.round>1)) b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"'));
-  if(t.ty==='Payment'&&l.stage===9&&l.pay==='ticket'){ b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"')); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
-  if(t.ty==='Payment'&&l.stage===10) b.push(simbtn('The link expired unpaid — Ops closes the ticket','data-sim="extExpire" data-line="'+l.id+'"'));
-  if(t.ty==='Payment'&&l.stage===10) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
+  if(t.ty==='Payment'&&l.stage===10&&l.pay==='ticket'){ b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"')); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
+  if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('The link expired unpaid — Ops closes the ticket','data-sim="extExpire" data-line="'+l.id+'"'));
+  if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   return b.length?simblock('Simulate the desk or the client','',b.join('')):'';
 }
 
@@ -4222,7 +4457,7 @@ function fired30(r){ var since=S.now-30*86400000; var n=S.data.tasks.filter(func
 
 /* ---------- R1 · the list ---------- */
 SCREENS.rules=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var rs=S.data.rules; S.ui.rb=null; S.ui.rb_id=''; S.ui.rb_touch=0;
   var sk=S.ui.rsort||'fd', dir=S.ui.rdir||'desc', appl=function(r){ return S.data.lines.filter(function(l){ return !dead(l)&&ruleFilters(r,l); }).length; };
   var sorted=rs.slice().sort(function(a,b){ var va=sk==='fd'?(a.fd||0):(sk==='n'?a.n:(sk==='ap'?appl(a):(a.act?1:0))), vb=sk==='fd'?(b.fd||0):(sk==='n'?b.n:(sk==='ap'?appl(b):(b.act?1:0))); var c=va<vb?-1:(va>vb?1:0); return dir==='desc'?-c:c; });
@@ -4285,7 +4520,7 @@ function workedExample(b){
   return '<div class="meta">If the conditions turned true now, '+esc(fmt(now))+', on <b>'+esc(ex?ex.id:'a line')+'</b>'+(ex?' ('+esc(uname(ex.owner))+')':'')+':</div><dl class="kvlist mt12"><dt>Created</dt><dd>'+esc(fmt(created))+'</dd><dt>Due</dt><dd>'+esc(fmt(due))+'</dd><dt>Escalates</dt><dd>'+(escAt?esc(fmt(escAt))+' → '+esc(uname(mg&&mg.mgr?mg.mgr:'vikram')):'Never')+'</dd></dl><div class="meta mt12">'+esc(tx)+' Weekends and the '+HOL.length+' listed holidays are skipped.</div>';
 }
 SCREENS.rule=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var id=S.route.id||'new', r=rbLoad(id); if(!r) return SCREENS.notfound();
   var b=S.ui.rb, e=ruleErrors(b,id), w=ruleWarnings(b), t=S.ui.rb_touch, isNew=id==='new', nerr=Object.keys(e).length, c=cfg();
   var html='<div class="crumbs"><button data-go="rules">Task rules</button>'+ic('chevright','ic14')+'<b>'+(isNew?'Create a task rule':esc(id))+'</b></div>'+
@@ -4400,7 +4635,7 @@ function simTaskRow(t,l){
   return '<div class="rtask'+(t.done?' done':'')+'"><span class="tick">'+(t.done?'✓':'')+'</span><div class="bd"><b>'+esc(t.title)+'</b><div class="m">'+chip(tstateLabel(s),tone,false,true)+chip(t.cls,t.cls==='SLA'?'violet':'neutral',false,true)+m+(t.rule?'<button class="rl" data-go="rule" data-id="'+t.rule+'">'+esc(t.rule)+'</button>':'<span class="meta">by hand</span>')+'</div></div></div>';
 }
 SCREENS.rulesim=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var l=simLine(); if(!l) return {sc:'Simulator', html:empty('inbox','No lines yet','Create an opportunity first.'), cta:''};
   var a=acctOf(l), o=oppOf(l), now=S.now, c=cfg();
   var lts=tasksOfLine(l.id), open=lts.filter(function(t){return !t.done;}).sort(function(x,y){return x.dueAt-y.dueAt;}), dn=lts.filter(function(t){return t.done;}).sort(function(x,y){return y.doneAt-x.doneAt;}).slice(0,8);
@@ -4446,7 +4681,7 @@ document.addEventListener('toggle',function(ev){ var t=ev.target; if(t instanceo
 
 /* ---------- R4 · task settings ---------- */
 SCREENS.rulecfg=function(){
-  var u=me(); if(!isMgrRole(u)) return rulesLock();
+  var u=me(); if(!isMgrRole(u)&&!(u&&u.role==='admin')) return rulesLock();
   var c=cfg(), hrs=[]; for(var h=c.ws;h<c.we;h++) hrs.push([h,p2(h)+':00']);
   var html='<div class="hdrow"><div><div class="h1">Task settings</div><div class="sub">One calendar, held centrally. Every clock, every wait and both scheduled checks run on it. There are no per-rule working hours.</div></div></div>'+diamonds()+rulesTabs('rulecfg')+
     '<div class="gap12" style="max-width:860px">'+
@@ -4520,15 +4755,15 @@ function issAssign(l){
   if(r.md.mode==='dig'){ r.md.st='pending'; r.md.at=S.now; issMail(l,'client',GENERIC_FROM,c.e||c.n,'Mandate letter to sign — '+a.n,'Please sign the mandate letter on Bimakendra: bimakendra.in/sign/'+l.id.toLowerCase()+'. Your relationship manager is '+rm+'.'); logAdd(l,'Mandate letter link shared with the client','System · three rails · Shared with client · Pending','post',1); }
   if(l.iss.skip12){ issRequestPolicy(l); return; }
   l.iss.stage = r.rhl.mode==='none' ? 'pf' : 'docs';
-  moveStage(l,12,'Ticket assigned · tracks started');
+  moveStage(l,13,'Ticket assigned · tracks started');
 }
 function issAllDocsIn(l){ var r=l.iss.rows; return (r.rhl.st==='na'||r.rhl.st==='sent') && (r.pf.st==='na'||r.pf.st==='done') && (r.md.st==='na'||r.md.st==='done'); }
-function issCheckDocs(l){ if(l.stage===12 && l.iss.stage!=='await' && issAllDocsIn(l)) issRequestPolicy(l); }
+function issCheckDocs(l){ if(l.stage===13 && l.iss.stage!=='await' && issAllDocsIn(l)) issRequestPolicy(l); }
 function issRequestPolicy(l){
   var a=acctOf(l), r=l.iss.rows; r.pol.st='pending'; r.pol.at=S.now; l.iss.stage='await';
   issMail(l,'insurer','Customer Success',(l.picked||l.ins)+' · POC','Policy copy and tax invoice — '+a.n+' · '+l.product,'All documents are in'+(r.pf.st==='done'?' (proposal form attached)':'')+(r.md.st==='done'?' (mandate attached)':'')+'. Please issue the policy copy and tax invoice.');
   logAdd(l,'Policy copy and tax invoice requested from '+(l.picked||l.ins),'System · automatic once every requirement is complete · 3 follow-ups, then 3 escalations','sys',1);
-  moveStage(l,13,'Every requirement complete · policy copy requested');
+  moveStage(l,14,'Every requirement complete · policy copy requested');
 }
 function issPolicyArrived(l,how,only){ var r=l.iss.rows, p=polOfLine(l); r.pol.copy=1; r.pol.inv=only?0:1; r.pol.st='qc';
   /* the desk captures these off the copy; the RM compares them with the confirmed quote */
@@ -4554,16 +4789,16 @@ function issSend(l){
   if(p){ p.issuing=0; p.pno=insPolNo(p); p.period=fmtD(S.now)+' – '+fmtD(S.now+365*86400000-86400000); p.start=S.now; p.exp=S.now+365*86400000-86400000; p.issuedAt=S.now; }
   issMail(l,'client',GENERIC_FROM,c.e||c.n,'Your policy — '+a.n+' · '+l.product,'Policy '+(p?p.pno:'')+' and the tax invoice are attached, and on Bimakendra. '+uname(l.owner)+', your relationship manager, will walk you through the cover.');
   logAdd(l,'Policy copy and tax invoice sent to the client','System · QC passed · three rails · insurer policy number read from the copy'+(p?' · '+p.pno+' · BK '+(p.bkno||'—'):''),'post',1);
-  moveStage(l,14,'Policy copy sent to the client');
+  moveStage(l,15,'Policy copy sent to the client');
 }
 /* [stated 26 Sep · 10.1] nothing after payment withdraws, and the line never goes back from 13 to 12 */
 /* ---------- derived: who must act, rows text, ticket object ---------- */
 function issWaiting(l){
-  if(dead(l)||l.stage===14) return '—';
-  if(l.stage===11||!l.iss) return 'Post-purchase';
+  if(dead(l)||l.stage===15) return '—';
+  if(l.stage===12||!l.iss) return 'Post-purchase';
   var r=l.iss.rows;
-  if(l.stage===12){ if(r.pf.mode==='off'&&r.pf.st==='pending'&&r.pf.recv) return 'Us'; if(r.pf.st==='pending'||r.md.st==='pending') return 'Client'; if(r.rhl.st==='pending') return 'Insurer'; return 'Post-purchase'; }
-  if(l.stage===13) return r.pol.st==='qc'?'Us':'Insurer';
+  if(l.stage===13){ if(r.pf.mode==='off'&&r.pf.st==='pending'&&r.pf.recv) return 'Us'; if(r.pf.st==='pending'||r.md.st==='pending') return 'Client'; if(r.rhl.st==='pending') return 'Insurer'; return 'Post-purchase'; }
+  if(l.stage===14) return r.pol.st==='qc'?'Us':'Insurer';
   return 'Post-purchase';
 }
 function rowTx(k,r){
@@ -4583,19 +4818,19 @@ function openRuleTask(l,rule){ return tasksOfLine(l.id).filter(function(t){retur
 function postNextAction(l){
   var i=l.iss, r=i?i.rows:null, w=issWaiting(l), welcome=openRuleTask(l,'TR-08');
   if(isChola(l)) return cholaPostNext(l);
-  if(l.stage===11) return welcome
+  if(l.stage===12) return welcome
     ? {tone:'amber',lab:'Next action',txt:'Paid. Handed over from '+uname(l.soldBy||'sales'),why:'The proposal form and mandate links go out from a generic BimaKavach address the moment Customer Success assigns '+(i?i.id:'the ticket')+' — often before you have called. The email names you.',acts:[['welcome','Welcome call']]}
     : {tone:'violet',lab:'Waiting on post-purchase',txt:(i?i.id:'The ticket')+' created · Customer Success has not assigned it yet',why:'Nothing is needed from you until the document tracks start.',acts:[]};
-  if(l.stage===12){
+  if(l.stage===13){
     if(w==='Us') return {tone:'amber',lab:'Next action',txt:'The client sent the filled proposal form. Upload it to the ticket',why:'Only you can — the client sends it to you, not to the desk. If it was the last document outstanding the line moves on by itself.',acts:[['uploadPf','Upload proposal form'],['chase2','Log chase']]};
     if(w==='Client'){ var pend=[r.pf.st==='pending'?'proposal form':'',r.md.st==='pending'?'mandate':''].filter(Boolean).join(' and '); return {tone:'blue',lab:'Waiting on the client',txt:pend.charAt(0).toUpperCase()+pend.slice(1)+' shared · not yet '+(r.pf.st==='pending'?'filled':'signed')+(r.rhl.st==='pending'?' · RHL still with the insurer':''),why:'One chase for both — two rows on the ticket, one ask of the client. Customer Success reminders land on your task, not in a second queue.'+(welcome?' The welcome call is still open.':''),acts:[['chase2','Log chase']].concat(welcome?[['welcome','Log welcome call']]:[['reshare','Re-share a link']])}; }
     if(w==='Insurer') return {tone:'violet',lab:'Waiting on the insurer',txt:'RHL requested by Customer Success'+(r.rhl.fu?' · '+r.rhl.fu+' follow-ups sent':''),why:'Nothing is needed from you. The desk chases the insurer; the forms are done.',acts:[]};
     return {tone:'violet',lab:'Waiting on post-purchase',txt:'Documents in · the desk is moving it on',why:'',acts:[]};
   }
-  if(l.stage===13) return r.pol.st==='qc'
+  if(l.stage===14) return r.pol.st==='qc'
     ? {tone:'amber',lab:'Next action',txt:'Policy copy received — check it before it goes to the client',why:r.pol.inv?'Compare it with the confirmed quote, then approve. It goes out on the three rails.':'Tax invoice · awaited. You can check the copy now; it goes out once the invoice is in.',acts:[['qcApprove','Check and approve']]}
     : {tone:'violet',lab:'Waiting on the insurer',txt:'Copy requested from '+(l.picked||l.ins)+' '+plural(daysBetween(r.pol.at||l.enteredAt,S.now),'day')+' ago'+(r.pol.fu||r.pol.esc?' · '+r.pol.fu+' follow-ups, '+r.pol.esc+' escalations':''),why:'Three follow-ups, then three escalations. When all six are exhausted, Ops contacts the insurer outside the ticket. Watch only.',acts:[['go:ticket:'+i.id,'Open ticket']]};
-  if(l.stage===14){ var ex=openRuleTask(l,'TR-10'); return ex
+  if(l.stage===15){ var ex=openRuleTask(l,'TR-10'); return ex
     ? {tone:'green',lab:'Issued — one call left',txt:'Policy copy and tax invoice sent to the client. Walk them through the cover',why:'The client already has the documents on the three rails. The policy explanation call is yours.',acts:[['explain','Log policy explanation call']]}
     : {tone:'green',lab:'Issued',txt:'Steady state',why:'Endorsements and claims from the account’s Policies tab; renewal as a new opportunity linked to this policy.',acts:[]}; }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
@@ -4604,10 +4839,10 @@ function postNextAction(l){
 /* ---------- simulated events on a post-purchase line (amber dashed) ---------- */
 function postSims(l){
   var b=[], i=l.iss; if(!i) return b; var r=i.rows, at=function(lab,k){ b.push(simbtn(lab,'data-psim="'+k+'" data-line="'+l.id+'"')); };
-  if(l.stage===11&&i.stage==='new') at('Customer Success assigns the ticket — tracks start','assign');
-  if(l.stage===12){ if(r.rhl.st==='pending'){ at('Insurer sends the RHL (email bot)','rhl'); at('Desk follow-up to the insurer','csfu'); } if(r.pf.st==='pending'&&r.pf.mode==='dig') at('Client fills the proposal form on Bimakendra','pf'); if(r.pf.st==='pending'&&r.pf.mode==='off'&&!r.pf.recv) at('Client sends the filled offline form to you','pfrecv'); if(r.md.st==='pending') at('Client signs the mandate on Bimakendra','md'); }
+  if(l.stage===12&&i.stage==='new') at('Customer Success assigns the ticket — tracks start','assign');
+  if(l.stage===13){ if(r.rhl.st==='pending'){ at('Insurer sends the RHL (email bot)','rhl'); at('Desk follow-up to the insurer','csfu'); } if(r.pf.st==='pending'&&r.pf.mode==='dig') at('Client fills the proposal form on Bimakendra','pf'); if(r.pf.st==='pending'&&r.pf.mode==='off'&&!r.pf.recv) at('Client sends the filled offline form to you','pfrecv'); if(r.md.st==='pending') at('Client signs the mandate on Bimakendra','md'); }
   /* [stated 26 Sep · 10.7] the copy and the invoice can arrive separately; the RM checks the copy before it goes out */
-  if(l.stage===13){ if(!r.pol.copy){ at('Insurer sends the policy copy and tax invoice (bot)','pol'); at('Insurer sends the policy copy only','polonly'); at('Desk follow-up or escalation to the insurer','polfu'); } else if(!r.pol.inv) at('Insurer sends the tax invoice','inv'); }
+  if(l.stage===14){ if(!r.pol.copy){ at('Insurer sends the policy copy and tax invoice (bot)','pol'); at('Insurer sends the policy copy only','polonly'); at('Desk follow-up or escalation to the insurer','polfu'); } else if(!r.pol.inv) at('Insurer sends the tax invoice','inv'); }
   return b;
 }
 function postSim(k,l){
@@ -4669,7 +4904,7 @@ FLOWS.uploadPf={t:'Upload the filled proposal form', sub:'The client filled the 
     note('blue','','Check it first: signatory, date, every section. Once uploaded, Customer Success takes it to the insurer with the policy request.')+
     simblock('Simulate','','<button class="simbtn" data-mset="inc" data-mval="1">Pretend it is incomplete</button><button class="simbtn" data-mset="inc" data-mval="">It is complete</button>'); },
   can:function(){ return !S.sel.inc; }, ok:'Upload to the ticket',
-  run:function(){ var l=FL(); var ok=write(function(){ var r=l.iss.rows; r.pf.st='done'; r.pf.recv=0; r.pf.at=S.now; logAdd(l,'Filled proposal form uploaded to the ticket',uname(S.user)+' · row Completed','post'); completeRuleTasks(l,'TR-09'); issCheckDocs(l); },'the upload'); if(!ok) return 'fail'; toast('Proposal form uploaded',l.stage===13?'That was the last document — policy copy requested, line at Awaiting Policy Copy.':'Row Completed. '+(l.iss.rows.md.st==='pending'?'The mandate is still with the client.':(l.iss.rows.rhl.st==='pending'?'The RHL is still with the insurer.':''))); }};
+  run:function(){ var l=FL(); var ok=write(function(){ var r=l.iss.rows; r.pf.st='done'; r.pf.recv=0; r.pf.at=S.now; logAdd(l,'Filled proposal form uploaded to the ticket',uname(S.user)+' · row Completed','post'); completeRuleTasks(l,'TR-09'); issCheckDocs(l); },'the upload'); if(!ok) return 'fail'; toast('Proposal form uploaded',l.stage===14?'That was the last document — policy copy requested, line at Awaiting Policy Copy.':'Row Completed. '+(l.iss.rows.md.st==='pending'?'The mandate is still with the client.':(l.iss.rows.rhl.st==='pending'?'The RHL is still with the insurer.':''))); }};
 
 FLOWS.reshare={t:'Ask the desk to resend', sub:'The client says it never arrived. The desk resends it from the generic address; your ask is on the RM ↔ desk thread.',
   body:function(){ var l=FL(), r=l.iss.rows, items=[]; if(r.pf.st==='pending') items.push(['pf',r.pf.mode==='off'?'Proposal form PDF':'Proposal form link']); if(r.md.st==='pending') items.push(['md','Mandate letter link']); if(r.rhl.st==='sent') items.push(['rhl','Risk-held letter']); if(r.pol.st==='sent') items.push(['pol','Policy copy and tax invoice']);
@@ -4785,13 +5020,13 @@ function rmHome(uid){
   b.late.sort(function(x,y){ return (order[taskState(x)]-order[taskState(y)])||(x.dueAt-y.dueAt); });
   return b;
 }
-function renewalLineFor(a,p){ return linesOfAcct(a.id).filter(function(l){ return l.renews===p.id&&!dead(l)&&l.stage<14; })[0]||null; }
+function renewalLineFor(a,p){ return linesOfAcct(a.id).filter(function(l){ return l.renews===p.id&&!dead(l)&&l.stage<15; })[0]||null; }
 function rmBuckets(uid){
   var mine=S.data.lines.filter(function(l){return l.owner===uid;}), accts=rmAccounts(uid), b={fresh:[],ren:[],late:[],move:[],quiet:[]}, used={};
   var order={esc:0,over:1,today:2};
   /* 1 · newly assigned: handed over at payment with no welcome call yet, or a sales line nobody has called */
   mine.forEach(function(l){ if(dead(l)) return;
-    if(l.stage===11 && openRuleTask(l,'TR-08')){ b.fresh.push({l:l,k:'post'}); used[l.id]=1; }
+    if(l.stage===12 && openRuleTask(l,'TR-08')){ b.fresh.push({l:l,k:'post'}); used[l.id]=1; }
     else if(isNewly(l)){ b.fresh.push({l:l,k:'sale'}); used[l.id]=1; } });
   b.fresh.sort(function(x,y){return (y.l.reAt||y.l.paidAt||y.l.assignedAt)-(x.l.reAt||x.l.paidAt||x.l.assignedAt);});
   /* 2 · renewals: my renewal lines still to renew, soonest expiry first — the system opens one 90 days out */
@@ -4801,11 +5036,11 @@ function rmBuckets(uid){
   b.late.sort(function(x,y){ return (order[taskState(x)]-order[taskState(y)]) || (x.dueAt-y.dueAt); });
   /* 4 · action required: the stage or the ticket needs me */
   /* [stated 26 Sep · 17.3] also: a chase past its follow-up date, the QC check, the policy explanation call */
-  mine.forEach(function(l){ if(used[l.id]||dead(l)) return; if(l.stage===14){ if(openRuleTask(l,'TR-10')){ b.move.push({l:l}); used[l.id]=1; } return; } if(l.status==='park'){ if(l.revisit<=S.now){ b.move.push({l:l}); used[l.id]=1; } return; }
-    var fu=l.stage===12?nextFollowUp(l):0; if(actingParty(l)==='Us'||(fu&&fu<S.now)){ b.move.push({l:l}); used[l.id]=1; } });
+  mine.forEach(function(l){ if(used[l.id]||dead(l)) return; if(l.stage===15){ if(openRuleTask(l,'TR-10')){ b.move.push({l:l}); used[l.id]=1; } return; } if(l.status==='park'){ if(l.revisit<=S.now){ b.move.push({l:l}); used[l.id]=1; } return; }
+    var fu=l.stage===13?nextFollowUp(l):0; if(actingParty(l)==='Us'||(fu&&fu<S.now)){ b.move.push({l:l}); used[l.id]=1; } });
   S.data.svc.forEach(function(t){ var a=acctOf(t.acct); if(a&&a.own===uid&&!svcClosed(t)&&svcNeed(t)) b.move.push({t:t}); });
   /* 5 · quiet: with someone else and silent for 30 days */
-  mine.forEach(function(l){ if(used[l.id]||dead(l)||l.stage===14||l.status==='park') return; if(daysQuiet(l)>=QUIET_DAYS) b.quiet.push(l); });
+  mine.forEach(function(l){ if(used[l.id]||dead(l)||l.stage===15||l.status==='park') return; if(daysQuiet(l)>=QUIET_DAYS) b.quiet.push(l); });
   b.quiet.sort(function(x,y){return daysQuiet(y)-daysQuiet(x);});
   b.onme=b.fresh.concat(b.late,b.move);
   return b;
@@ -4850,8 +5085,8 @@ SCREENS.rmhome=function(){
 };
 function rmStats(u){
   var ls=S.data.lines.filter(function(l){return l.owner===u.id;}), accts=rmAccounts(u.id), post=ls.filter(postLine), tk=myTasks(u.id);
-  return {u:u, accts:accts.length, post:post.length, client:post.filter(function(l){return actingParty(l)==='Client';}).length, await:post.filter(function(l){return l.stage===13;}).length, onme:post.filter(function(l){return actingParty(l)==='Us';}).length,
-    issued:ls.filter(function(l){return l.stage===14&&l.paidAt&&daysBetween(l.paidAt,S.now)<=30;}).length, selling:ls.filter(openLine).length, svc:S.data.svc.filter(function(t){var a=acctOf(t.acct);return a&&a.own===u.id&&!svcClosed(t);}).length,
+  return {u:u, accts:accts.length, post:post.length, client:post.filter(function(l){return actingParty(l)==='Client';}).length, await:post.filter(function(l){return l.stage===14;}).length, onme:post.filter(function(l){return actingParty(l)==='Us';}).length,
+    issued:ls.filter(function(l){return l.stage===15&&l.paidAt&&daysBetween(l.paidAt,S.now)<=30;}).length, selling:ls.filter(openLine).length, svc:S.data.svc.filter(function(t){var a=acctOf(t.acct);return a&&a.own===u.id&&!svcClosed(t);}).length,
     ren:renewalsFor(accts,60).length, esc:tk.filter(function(t){return taskState(t)==='esc';}).length, over:tk.filter(function(t){return taskState(t)==='over';}).length, force:accts.reduce(function(s,a){return s+premInForce(a);},0)};
 }
 SCREENS.rmteam=function(){
@@ -4865,7 +5100,7 @@ SCREENS.rmteam=function(){
   var slip=[];
   post.forEach(function(l){
     /* [stated 24 Sep · TBD-53] working days, not calendar days */
-    if(l.stage===11&&l.iss&&!l.iss.assignedAt&&workDaysInStage(l)>=1){ slip.push({l:l,k:'unas',d:workDaysInStage(l)}); return; }
+    if(l.stage===12&&l.iss&&!l.iss.assignedAt&&workDaysInStage(l)>=1){ slip.push({l:l,k:'unas',d:workDaysInStage(l)}); return; }
     if(stalledPost(l)){ slip.push({l:l,k:'stuck',d:workDaysInStage(l)}); return; }
     var fu=nextFollowUp(l); if(actingParty(l)==='Client'&&fu&&fu<S.now) slip.push({l:l,k:'chase',d:daysBetween(fu,S.now)});
   });
@@ -4885,7 +5120,7 @@ SCREENS.rmteam=function(){
     '<div class="hgap">'+
     (esc_.length?hCard('esc','red','alert','Escalated tasks',hCut('resc',esc_.map(hMgrTaskRow)),chip(esc_.length,'red',true,true),''):'')+
     (slip.length?hCard('slip','amber','clock','Stalled',hCut('rslip',slip.map(function(x){
-        var lab=x.k==='unas'?'Unassigned':(x.k==='chase'?'Documents pending':(x.l.stage===12?'Documents pending':(x.l.stage===13?'Awaiting copy':'Unassigned')));
+        var lab=x.k==='unas'?'Unassigned':(x.k==='chase'?'Documents pending':(x.l.stage===13?'Documents pending':(x.l.stage===14?'Awaiting copy':'Unassigned')));
         var meta=chip(lab,x.k==='chase'?'amber':'red',true,true)+'<span>'+esc(uname(x.l.owner))+' \u00b7 '+esc(stageName(x.l.stage))+' \u00b7 waiting on '+esc(actingParty(x.l))+' \u00b7 '+plural(x.d,x.k==='chase'?'day':'working day')+(x.k==='chase'?' past the follow-up':' at this stage')+'</span>';
         return hSlipRow(x.l,meta); })),
       chip(slip.length,'amber',true,true),''):'')+
@@ -5422,7 +5657,7 @@ FLOWS.share={t:'Share payment details with the client', sub:'Check the payment m
       (payModeOf(l)==='Payment link'?'<button type="button" class="btn sm" data-copy="1">Copy the payment link</button>':''); },
   repaintOn:['ch'],
   can:function(){return true;}, ok:function(){ return 'Send to '+FL().contact.n; },
-  run:function(){ var l=FL(), made=[]; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='shared'; logAdd(x,'Payment details shared with client',uname(S.user)+' · '+payModeOf(l)+' · '+(S.sel.ch||'Email')+' to '+(S.sel.ch==='WhatsApp'?x.contact.m:x.contact.e),'pay'); if(x.stage<10) made=made.concat(moveStage(x,10,'Payment details sent')); }); },'sharing'); if(!ok) return 'fail'; toast('Payment details sent to '+l.contact.n,payModeOf(l)+' · '+stageToast(l,made)); }};
+  run:function(){ var l=FL(), made=[]; var ok=write(function(){ (l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); x.pay='shared'; logAdd(x,'Payment details shared with client',uname(S.user)+' · '+payModeOf(l)+' · '+(S.sel.ch||'Email')+' to '+(S.sel.ch==='WhatsApp'?x.contact.m:x.contact.e),'pay'); if(x.stage<11) made=made.concat(moveStage(x,11,'Payment details sent')); }); },'sharing'); if(!ok) return 'fail'; toast('Payment details sent to '+l.contact.n,payModeOf(l)+' · '+stageToast(l,made)); }};
 
 /* ---------- confirm payment: a screenshot, read ---------- */
 function proofUtr(l){ return 'UTIB'+'2609'+l.id.slice(3)+'1178'; }
@@ -5475,7 +5710,7 @@ FLOWS.proof={t:'Confirm payment', sub:'Upload the payment screenshot the client 
       logAdd(x,'Sold by '+uname(x.owner),'System · '+(x.picked||'')+' · '+INR(premOf(x)),'sys',1);
       x.notSel=quotesFor(x).filter(function(q){return q.st==='quoted'&&q.i!==x.picked;}).map(function(q){return q.i;});
       logAdd(x,'Owner changed from '+uname(x.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · Sold by '+uname(x.owner)+' · account owner moved too','sys',1);
-      x.owner=rm; tasksOfLine(x.id).forEach(function(t){ if(!t.done) t.owner=rm; }); moveStage(x,11,'Payment confirmed'); issCreate(x); });
+      x.owner=rm; tasksOfLine(x.id).forEach(function(t){ if(!t.done) t.owner=rm; }); moveStage(x,12,'Payment confirmed'); issCreate(x); });
       if(a) a.own=rm; },'the payment'); if(!ok) return 'fail';
     toast('Paid — handed to '+uname(rm),'Payment Completed. Sold by '+uname(S.user)+'. The post-purchase ticket is open; the RM’s welcome-call clock is running.'); }};
 document.addEventListener('change',function(ev){
@@ -5673,7 +5908,7 @@ function renTable(rows){
   return '<div class="tw"><table class="t"><thead><tr><th>Renewal</th><th>Account</th><th>Expiring policy</th><th>Renewal due</th><th>Stage</th><th>Waiting on</th><th class="num">Expiring premium</th></tr></thead><tbody>'+rows.map(renRow).join('')+'</tbody></table></div>';
 }
 SCREENS.renewals=function(){
-  var u=me(); if(u.role!=='rm'&&u.role!=='rmhead') return noAccess('screen');
+  var u=me(); if(u.role!=='rm'&&u.role!=='rmhead'&&u.role!=='admin') return noAccess('screen');
   var ids=scopeIds(u), all=renLines().filter(function(l){ return ids.indexOf(l.owner)>=0; }), f=S.ui.rnf||'due', sel=S.ui.rnb||'';
   var byExp=function(x,y){ var a=renPolHit(x), b=renPolHit(y); return (a?a.p.exp:0)-(b?b.p.exp:0); };
   var due=all.filter(renDue).sort(byExp), renewed=all.filter(function(l){ return !dead(l)&&l.stage>=SALES_STAGES; }).sort(byExp), lost=all.filter(dead).sort(byExp);
@@ -6327,6 +6562,26 @@ function seedFill(d){ var SMP={tob:'Manufacturing',noc:'Private limited',to:'₹
   if(S.user && !userById(S.user)) S.user=null;
   if(S.route && S.route.v && !SCREENS[S.route.v]) S.route={v:'home'};
   paint();
+})();
+
+/* ==================================================================== *
+ *  Repo fixes — applied on top of the prototype artifact. build.mjs appends
+ *  this file after the modules; porting a new artifact version never touches
+ *  it. After each port, check whether the prototype now carries a fix, and
+ *  delete it here if so.
+ * ==================================================================== */
+
+/* Admin opens any account or opportunity [v65: Admin sees everything and acts
+   directly]. The lists widen through scopeIds(), but canSeeAcct() and
+   canSeeLine() have no Admin case, so every record opened from those lists
+   said "You don't have access". Present in v73. Wrapping keeps the artifact's
+   own checks for every other role. */
+(function(){
+  var seeAcct = canSeeAcct, seeLine = canSeeLine;
+  function isAdmin(u){ u = u || me(); return !!u && u.role === 'admin'; }
+  canSeeAcct = function(a, u){ return (isAdmin(u) && !!a && !a.merged) || seeAcct(a, u); };
+  canSeeLine = function(l, u){ return (isAdmin(u) && !!l) || seeLine(l, u); };
+  paint();   // boot has already painted; repaint in case it restored an Admin on a record
 })();
 
 </script>
