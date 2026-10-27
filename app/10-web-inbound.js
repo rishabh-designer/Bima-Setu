@@ -52,10 +52,10 @@ function runInbound(k){
     /* where the line lands — the last step the customer completed */
     var stage=1, req=null, rate=null, online={}, legsDone=0;
     if(k.req){ req={si:'',tp:'',to:'',tob:'',noc:'',pol:'',ins:'',exp:'',ten:'',clm:'',pan:'',note:''}; WEB_LEGS.forEach(function(g,i){ if(k.step==='legs'&&i>=k.legs) return; var any=false; g.slice(1).forEach(function(f){ if(k.req[f]!==undefined){ req[f]=k.req[f]; online[f]=1; any=true; } }); if(any) legsDone++; }); }
-    if(k.step==='legs') stage=2; if(k.step==='rated'){ stage=3; rate=1; } if(k.step==='selected'){ stage=9; rate=1; }
+    if(k.step==='legs') stage=2; if(k.step==='rated'){ stage=3; rate=1; } if(k.step==='selected'){ stage=(a&&a.prov)?9:10; rate=1; }
     var l=newLine({opp:o.id,acct:a.id,product:k.product,owner:own.u,stage:stage,rate:rate,req:stage>=3||k.step==='legs'?req:null,src:k.src,contact:c,sys:1,
       how:'Inbound automation · '+k.src+' · assigned to '+uname(own.u)+' · '+own.how});
-    l.inbound={step:k.step,legs:legsDone,at:S.now}; l.reqOnline=online;
+    l.inbound={step:k.step,legs:legsDone,at:S.now}; l.reqOnline=online; l.drop={start:'Company name filled',legs:'L1 completed',rated:'View all the available quotes',selected:'Quote selected by user'}[k.step]||''; if(k.step==='selected'){ l.route='OPS'; l.insBranch=(a.city||'Head office')+' branch'; }
     if(k.step==='rated'||k.step==='selected'){ l.webQuotes=QUOTES.dau.filter(function(q){return q.st==='quoted';}).map(function(q){ return {i:q.i,sel:k.pick===q.i?1:0}; }); }
     if(k.step==='selected'){ l.picked=k.pick; l.ins=k.pick; l.prem=(QUOTES.dau.filter(function(q){return q.i===k.pick;})[0]||{}).p||0;
       logAdd(l,'Quote selected on the website','System · '+k.pick+' · '+INR(l.prem)+' · set as the confirmed quote','web',1); }

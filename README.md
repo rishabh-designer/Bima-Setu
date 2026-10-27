@@ -32,11 +32,12 @@ npm run shots                      # build, then 27 screenshots into shots/
 `npm test` drives the real page in a real browser. It signs in as each person,
 takes the Workmen's Compensation line through Cholamandalam's real-time
 issuance (and the assisted and provisional-account variants), takes the Cyber
-line through its band-chosen RFQ to placement, pays two opportunities on one
-request, holds an unverified account at KYC Details Requested until KYC clears,
-checks website-lead priority, the Won filter, the Admin console and masters,
-and the repo fixes, walks every screen and tab for every person, and fails on
-any `FAIL` line or any browser console error. Without network access the Google Fonts request
+line through its band-chosen RFQ to placement, pays two same-insurer
+opportunities on one request, holds an unverified account at KYC Details
+Requested until KYC clears, hands an ABM prospect off to Sales, checks
+website-lead placement and priority, the Won filter, the Admin console and
+masters, and the repo fixes, walks every screen and tab for all nine people, and
+fails on any `FAIL` line or any browser console error. Without network access the Google Fonts request
 fails and logs two console errors, so the run ends `ERRORS` and exits 1 even
 when nothing else is wrong — check for lines beginning `FAIL`. CI has network
 access, so it sees neither.
@@ -46,7 +47,7 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, twenty-five JS modules, repo fixes
+app/            the source — one stylesheet fragment, forty-five JS modules, repo fixes
 build.mjs       concatenates app/ into public/index.html
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          smoke.js (assertions) and shots.js (screenshots)
@@ -80,6 +81,11 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `21-ctc.js` | Click to call |
 | `22-docs.js` | The document viewer — view and download, every document type |
 | `23-helpers.js` | Shared helpers — panel states, activity kinds, renewal and lead priority |
+| `24`–`33` | v74 — payment and issuance tickets, instant link vs Ops ticket, call tasks, website drop-off, quotes decide the route, addresses, simulated events, seed |
+| `34`–`35` | Raise ticket (endorsements and claims only) and fallback users |
+| `36`–`41` | ABM pre-sales — prospect calls and email, tasks, the glue into BimaSetu, configurator stages, the ABM pool and team |
+| `42-rm-allocation.js` | RM allocation master — editable, live at Payment Completed |
+| `43-users-master.js` | Users master and reporting lines |
 | `99-boot.js` | Boot |
 | `repo-fixes.css`, `repo-fixes.js` | Fixes applied on top of the prototype — see *Repo fixes* below |
 
@@ -96,7 +102,7 @@ first — is the dependency order. Everything shares one scope — there are no 
 ### State
 
 Everything is remembered in the browser under `localStorage`, key
-`bksales.v20`. **Reset** in the sidebar returns to the seed. The clock is fixed
+`bksales.v25`. **Reset** in the sidebar returns to the seed. The clock is fixed
 at Mon 21 Sep 2026, 11:00 and only moves through *Prototype controls* or the
 rule simulator; when it moves, every scheduled rule check between then and the
 target runs.
@@ -111,9 +117,10 @@ never overwrites: `build.mjs` adds `app/repo-fixes.css` after the stylesheet and
 - **Compliance buttons clipped** (v64 onward). Below about 1400px the PAN row's
   verification line stretched Account 360 past the panel, hiding View and
   Download. `repo-fixes.css` lets the line wrap.
-- **Admin could not open records** (v73). Admin's lists showed every account and
-  opportunity, but the access check had no Admin case. `repo-fixes.js` lets Admin
-  open any of them; every other role keeps the prototype's own check.
+- **Admin could not open renewals** (v73 onward). Admin's lists are company-wide,
+  but `canSeeLine()` refuses a renewal to anyone who is not an RM. `repo-fixes.js`
+  lets Admin open them; every other role keeps the prototype's own check. (v73
+  also refused Admin every account; the prototype fixed that part in v75.)
 
 After each port, check whether the prototype now carries a fix and delete it
 here if so. The smoke tests cover both.

@@ -15,16 +15,16 @@ function tkAmt(l){ return l.amt||premOf(l); }
 
 /* [stated 26 Sep · 9.4 · 8.1] the desk's own stage, shown verbatim and read-only; BimaSetu never sets it */
 var OPS_OWNER='Farhan Qureshi';
-function deskStage(t){ var l=t.line;
+function deskStage0(t){ var l=t.line;
   if(t.ty==='Placement'){ if(l.stage>=9||dead(l)) return {st:'Closed',tags:[]}; if(l.stage===6&&!l.qAns&&l.round===1) return {st:'On hold — query to sales',tags:['awaiting sales']}; if(l.stage===6) return {st:l.round>1?'Revision in progress':'Approaching insurers',tags:['awaiting insurers']}; return {st:'QCR delivered',tags:[]}; }
   if(l.stage>=SALES_STAGES) return {st:'Closed',tags:['payment confirmed']};
   if(l.payQ&&!l.payQ.ans) return {st:'On hold — query to sales',tags:['awaiting sales']};
   if(l.pay==='ticket') return {st:payModeOf(l)==='Payment link'?'Link requested from insurer':'Preparing details',tags:[payModeOf(l)==='Payment link'?'awaiting '+payInsurer(l):'in progress']};
   if(l.pay==='back') return {st:'Details attached',tags:[payModeOf(l)==='Payment link'?'link generated':'details ready']};
   return {st:'Awaiting payment',tags:['with client']}; }
-function opsClock(l){ var start=payRaisedAt(l), end=l.pay==='ticket'?S.now:(tkAt(l,/Payment details returned by Ops/,1)||S.now), m=workMins(start,end); return {m:m,over:m>60,running:l.pay==='ticket'}; }
+function opsClock(l){ var start=payRaisedAt(l), end=l.pay==='ticket'?S.now:(tkAt(l,/Payment details (returned|sent) by Ops/,1)||S.now), m=workMins(start,end); return {m:m,over:m>60,running:l.pay==='ticket'}; }
 /* the steps, oldest first; st: done | now | '' (still to come) */
-function ticketSteps(t){
+function ticketSteps0(t){
   var l=t.line, s=[];
   if(t.ty==='Placement'){
     s.push({t:'Raised',m:'by '+uname(l.owner),at:plcRaisedAt(l),st:'done'});
@@ -40,7 +40,7 @@ function ticketSteps(t){
   } else {
     var paid=l.pay==='paid'||l.stage>=SALES_STAGES;
     s.push({t:'Raised',m:'by '+uname(l.soldBy||l.owner),at:payRaisedAt(l),st:'done'});
-    s.push({t:'Ops prepares the details',m:l.pay==='ticket'?'With Ops':'',at:l.pay==='ticket'?0:tkAt(l,/Payment details returned by Ops/,1),st:l.pay==='ticket'?'now':'done'});
+    s.push({t:'Ops prepares the details',m:l.pay==='ticket'?'With Ops':'',at:l.pay==='ticket'?0:tkAt(l,/Payment details (returned|sent) by Ops/,1),st:l.pay==='ticket'?'now':'done'});
     s.push({t:'Sent to the client',m:l.pay==='back'?'Waiting on you':'',at:(l.pay==='shared'||paid)?tkAt(l,/Payment details shared/,1):0,st:l.pay==='back'?'now':((l.pay==='shared'||paid)?'done':'')});
     s.push({t:'Paid',m:l.pay==='shared'?'Waiting for the screenshot':'',at:paid?(l.paidAt||0):0,st:paid?'done':(l.pay==='shared'?'now':'')});
   }
@@ -48,7 +48,7 @@ function ticketSteps(t){
 }
 
 /* what the ticket is waiting for, in one sentence, with the action that moves it */
-function tkHead(t){
+function tkHead0(t){
   var l=t.line, who=l.contact.n||'the client';
   if(t.ty==='Placement'){
     if(l.stage>=9) return {tone:'green',k:'Closed',hl:'Client confirmed '+(l.picked||'an insurer'),w:'The ticket closed when the client confirmed a quote.',acts:[]};
@@ -92,7 +92,7 @@ function tkTrail(t){
 function tkSims(t){
   var l=t.line, b=[]; if(!canAct(l)||dead(l)) return '';
   if(t.ty==='Placement'&&l.stage===6&&(l.qAns||l.round>1)) b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"'));
-  if(t.ty==='Payment'&&l.stage===10&&l.pay==='ticket'){ b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"')); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
+  if(t.ty==='Payment'&&l.stage===10&&l.pay==='ticket'){ b=b.concat(paySimBtns(l)); if(!l.payQ) b.push(simbtn('Ops asks a question','data-sim="extOpsQ" data-line="'+l.id+'"')); }
   if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('The link expired unpaid — Ops closes the ticket','data-sim="extExpire" data-line="'+l.id+'"'));
   if(t.ty==='Payment'&&l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   return b.length?simblock('Simulate the desk or the client','',b.join('')):'';
@@ -136,7 +136,7 @@ function tkQcr(l){
   return card('Quote comparison report',
     '<div class="qcards">'+vs.slice().reverse().map(function(v){ var act=qcrActionable(l,v.v); return qcrCard(l,v.v,{primary:act,label:act?'Review the QCR':'View'}); }).join('')+'</div>');
 }
-function tkPayDetails(l){
+function tkPayDetails0(l){
   var lines=(l.payLines&&l.payLines.length?l.payLines.map(lineById).filter(Boolean):[l]), who=l.contact.n||'the client', paid=l.pay==='paid'||l.stage>=SALES_STAGES;
   var head='<div class="tk-pm"><div><div class="pm-k">Payment mode</div><div class="pm-v">'+esc(payModeOf(l))+'</div></div><div class="tk-pm-a"><div class="pm-k">Amount</div><div class="pm-v">'+INR(tkAmt(l))+'</div></div></div>';
   var facts='<div class="kvgrid mt16">'+
@@ -188,7 +188,7 @@ SCREENS.ticket=function(){
       '</div>')+
       (function(){ var d=deskStage(t), c=t.ty==='Payment'?opsClock(l):null; return card('On the desk','<div class="tk-kvs">'+kv('Desk stage','<b>'+esc(d.st)+'</b><div class="meta">as the desk names it · read-only</div>')+(d.tags.length?kv('Tags',d.tags.map(function(g){return chip(g,'neutral',false,true);}).join(' ')):'')+
         kv(t.ty==='Payment'?'Ops owner':'Placement owner',esc(t.ty==='Payment'?OPS_OWNER:PLC_DESK))+kv('Opened',esc(fmt(t.ty==='Placement'?plcRaisedAt(l):payRaisedAt(l))))+
-        (c?kv('Turnaround','<span class="'+(c.over?'red':'')+'">'+esc(whTx(c.m))+' of 60 working minutes'+(c.running?' · running':'')+'</span><div class="meta">One clock, never paused.</div>'):kv('Elapsed',esc(whTx(workMins(plcRaisedAt(l),l.stage>=7?(tkAt(l,/Quotes returned by placement/,1)||S.now):S.now)))))+'</div>'); })()+
+        (c?payTurnKv(l,c):kv('Elapsed',esc(whTx(workMins(plcRaisedAt(l),l.stage>=7?(tkAt(l,/Quotes returned by placement/,1)||S.now):S.now)))))+'</div>'); })()+
       tkSims(t)+
     '</aside></div>';
   return {sc:'Ticket', ctx:t.id, html:html, cta: raiseLines().length?'<button class="btn primary sm" data-flow="pickTicket">'+ic('plus')+'Raise ticket</button>':''};

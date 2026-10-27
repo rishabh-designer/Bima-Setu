@@ -14,7 +14,7 @@ function stageTrack(l){
     : (l.rate===1?'DUA — priced by the rater, no RFQ':(l.rate===0?(l.rfq&&l.rfq.direct?'Non-DUA — floated straight to placement':'Non-DUA — RFQ, then placement'):'DUA or non-DUA is decided when the requirement is captured'))));
   /* [stated 26 Sep · 2.1] hover shows entered-on and left-on; a stage visited before a route switch stays ticked */
   var seen={}; visitsOf(l).forEach(function(v){ if(v.out) seen[v.n]=1; });
-  var step=function(s){ var c='step'; if(s.n<l.stage||(s.n>l.stage&&seen[s.n])) c+=' done'; else if(s.n===l.stage) c+=(dead(l)?' now dead':' now'); return '<div class="'+c+'" title="'+esc(stageHover(l,s))+'"><div class="b"></div><div class="t">'+esc(s.t)+'</div></div>'; };
+  var step=function(s){ var c='step'; if(s.n<l.stage||(s.n>l.stage&&seen[s.n])) c+=' done'; else if(s.n===l.stage) c+=(dead(l)?' now dead':' now'); return '<div class="'+c+'" title="'+esc(stageHover(l,s))+'"><div class="b"></div><div class="t">'+esc(stLabel(l,s))+'</div></div>'; };
   var seller=l.soldBy?uname(l.soldBy):(paid?'sales':uname(l.owner));
   var head='<div class="stagecard"><div class="cap"><b>'+esc(cap)+'</b><span class="sp"></span><span class="meta">'+esc(side)+'</span></div>';
   if(!paid){
@@ -24,7 +24,7 @@ function stageTrack(l){
   return head+'<div class="track"><div class="phase soldc"><div class="ph-h">Selling <b>'+esc(seller)+'</b></div>'+
       '<div class="soldblk" title="Selling done"><div class="b"></div><div class="t">'+ic('check','ic14')+'Sold · Payment Completed</div>'+(l.paidAt?'<div class="d">Paid '+esc(fmtD(l.paidAt))+'</div>':'')+'</div></div>'+
     '<div class="hand"><span>→ RM</span><i></i></div>'+
-    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&(s.n===13||s.n===14)); }).map(step).join('')+'</div></div></div></div>';
+    '<div class="phase post wide"><div class="ph-h">Post-purchase <b>'+esc(uname(l.owner))+'</b></div><div class="ph-steps">'+STAGES.slice(SALES_STAGES).filter(function(s){ return !(isChola(l)&&instCfg(l).policy&&(s.n===13||s.n===14)); }).map(step).join('')+'</div></div></div></div>';
 }
 function clockCard(l){
   var w=actingParty(l), d=daysInStage(l), tone= dead(l)?'neutral':(w==='Us'?(d>=QUIET_DAYS?'red':'blue'):(daysQuiet(l)>=QUIET_DAYS?'red':'blue'));
@@ -34,7 +34,7 @@ function clockCard(l){
   return '<div class="clock '+tone+'"><div class="top"><span>Stage clock</span><span class="own">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span></div>'+
     '<div class="hl">'+esc(head)+'</div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
     '<div class="l1">'+esc(stageName(l.stage))+'<span> · waiting on '+esc(w)+'</span></div>'+
-    '<div class="l2">'+ic('clock','ic14')+'Last activity '+esc(fmt(lastActivity(l)))+(daysQuiet(l)>=QUIET_DAYS?' · <span class="red">'+daysQuiet(l)+' days quiet</span>':'')+'</div></div>';
+    '<div class="l2">'+ic('clock','ic14')+'Last activity '+esc(fmt(lastActivity(l)))+'</div></div>';
 }
 function naAttr(a,l){ if(a[0].indexOf('go:')===0){ var g=a[0].split(':'); return 'data-go="'+g[1]+'" data-id="'+g.slice(2).join(':')+'"'; } if(a[0]==='copylink') return 'data-copy="1"'; if(a[0]==='resendRfq') return 'data-resendrfq="'+l.id+'"'; if(a[0]==='resendQcr') return 'data-resendqcr="'+l.id+'"'; if(a[0]==='noapp') return 'data-flow="status" data-line="'+l.id+'" data-pre="noapp"'; if(a[0].indexOf('act:')===0) return 'data-rfqact="'+a[0].slice(4)+'" data-line="'+l.id+'"'; return a[0].indexOf('tab:')===0 ? 'data-uiset="ltab_'+l.id+'" data-uv="'+a[0].slice(4)+'"' : 'data-flow="'+a[0]+'" data-line="'+l.id+'"'; }
 function naCard(l){
@@ -56,8 +56,8 @@ function simsFor(l){
   if(l.stage===3&&l.rate===1) b.push(simbtn('The rater comes back empty — no insurer quotes','data-sim="raterNone" data-line="'+l.id+'"'));
   if(l.stage===6 && !l.plcQ && !l.qAns && l.round===1) b.push(simbtn('Placement raises a query','data-sim="plcQuery" data-line="'+l.id+'"'));
   if(l.stage===6 && (l.qAns||l.round>1||!l.plcQ)){ b.push(simbtn('Placement returns the QCR','data-sim="extPlc" data-line="'+l.id+'"')); b.push(simbtn('Placement returns: every insurer declined','data-sim="extNone" data-line="'+l.id+'"')); }
-  if(l.stage===10 && l.pay==='ticket') b.push(simbtn('Ops returns the payment details','data-sim="extOps" data-line="'+l.id+'"'));
-  if(l.stage===11&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on Chola’s link · policy issued in real time','data-sim="cholaPaid" data-line="'+l.id+'"')); b.push(simbtn('24 hours pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
+  if(l.stage===10 && l.pay==='ticket') b=b.concat(paySimBtns(l));
+  if(l.stage===11&&isChola(l)){ if(!cholaLinkExpired(l)){ b.push(simbtn('Client pays on '+shortIns(l.picked)+'’s link'+(instCfg(l).policy?' · policy issued in real time':' · policy follows from the insurer'),'data-v74sim="instPaid" data-line="'+l.id+'"')); b.push(simbtn(validTx(l)+' pass — the payment link expires','data-sim="cholaExpire" data-line="'+l.id+'"')); } }
   else if(l.stage===11) b.push(simbtn('Client pays · sends the screenshot','data-sim="extPaid" data-line="'+l.id+'"'));
   if(l.stage>=SALES_STAGES) b=b.concat(postSims(l));
   if((me().role==='exec'||me().role==='rm')&&l.stage<15) b.push(simbtn('Your manager takes this line over','data-sim="extTake" data-line="'+l.id+'"'));
@@ -78,8 +78,8 @@ function statusPill(l){ if(l.status==='open') return chip(l.stage>=SALES_STAGES?
 function lwLeft(l,a,o){
   var c=l.contact||{}, u=me(), sole=a.sole||(!!a.aad&&!a.gst), sib=o?linesOfAcct(l.acct).filter(function(x){return x.id!==l.id&&!isRen(x);}):renLinesOfAcct(l.acct).filter(function(x){return x.id!==l.id;});
   var acc=zc('Account & contact','<button class="link zname" data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button><div class="zchips">'+(a.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true))+(sole?chip('Sole proprietor','neutral',false,true):'')+'</div>'+
-    '<div class="zkv"><span>Contact on this line</span><b>'+esc(c.n||'—')+'</b>'+(c.m||c.e?'<div class="meta">'+esc([c.m,c.e].filter(Boolean).join(' · '))+'</div>':'')+'</div>'+
-    '<div class="zkv"><span>Account owner</span><b>'+esc(uname(a.own))+'</b></div>');
+    '<div class="zkv"><span>Contact on this line</span><div class="qcrow"><b>'+esc(c.n||'—')+'</b>'+(c.m&&canAct(l)&&!dead(l)?'<button class="qcall" data-qcall="'+l.id+'" title="Call '+esc(c.n||'the contact')+' — click to call" aria-label="Call '+esc(c.n||'the contact')+'">'+ic('phone','ic14')+'</button>':'')+'</div>'+(c.m||c.e?'<div class="meta">'+esc([c.m,c.e].filter(Boolean).join(' · '))+'</div>':'')+'</div>'+
+    abZkv(l,a));
   var kyc=zc('KYC',(a.prov?'<div class="meta">'+(a.pan||a.gst?'PAN and GST documents not uploaded yet.':'No PAN and no GST yet.')+' Everything up to a quote works — the payment request waits for it.</div>'+(onAcct(a,u)?'<button class="btn sm mt8" data-flow="kyc" data-acct="'+a.id+'" data-line="'+l.id+'">'+ic('shield')+'Get verified</button>':'')
     :'<div class="meta">'+esc(kycLine(a))+'</div>'));
   var sl=sib.length?sib.map(function(x){ var tag=dead(x)?chip(statusTx(x),'red',false,true):(x.status==='park'?chip('Time Pending','amber',false,true):(x.stage>=9&&x.pay!=='pre'&&x.stage<SALES_STAGES?chip('In '+payRef(x),'violet',false,true):''));
@@ -120,7 +120,7 @@ SCREENS.line=function(){
       (o?kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
          :kv('Business type','Renewal <span class="meta">· no opportunity — a renewal is a product line on the account</span>'))+(l.renews?renOverview(l):'')+
       kv('Source',esc(l.src||(o?o.src:'')||'—'))+kv('Created',esc(fmtD(l.createdAt)))+
-      kv('Calls',plural(callsMade(l),'call')+(l.stage<3&&!everConnected(l)&&l.status==='open'?'<div class="meta">'+(ATTEMPT_CAP-l.att)+' attempts left</div>':''))+
+      kv('Calls',plural(callsMade(l),'call')+(l.status==='open'&&(l.miss||0)?'<div class="meta">'+plural(l.miss,'missed call')+' since the last connect</div>':''))+
       (l.inbound?kv('Done online',esc(({legs:plural(l.inbound.legs||0,'step')+' of 4 discovery steps',rated:'Discovery and the rater’s quotes',selected:'Discovery, quotes and a quote selection'})[l.inbound.step]||'Contact details only')):'')+'</div>'+(l.renews?renFlag(l):'')+
       (l.stage>=9&&l.picked?diamonds(true)+soldBlock(l):'')+
       (l.stage>=1?diamonds(true)+reqSection(l,true):'');
@@ -131,7 +131,7 @@ SCREENS.line=function(){
   else if(tab==='docs'){ body=docsTab(l); }
   else if(tab==='mail'){ body=mailTrail(l); }
   else if(tab==='activity'){ body=lineActivity(l); }
-  else if(tab==='tickets'){ body='<div class="phhd"><div class="t">Tickets on this line</div><div class="a">'+plural(tks.length,'ticket')+(canAct(l)&&!dead(l)?' <button class="btn sm primary" data-flow="lineTicket" data-line="'+l.id+'">'+ic('plus')+'Raise ticket</button>':'')+'</div></div><div class="mt12">'+(tks.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+tks.map(function(t){ return '<div class="row" data-go="ticket" data-id="'+t.id+'"><div class="bd"><b>'+esc(t.id)+'</b> '+chip(t.st,t.tone,true,true)+'<div class="m2">'+esc(t.ty)+' · '+esc(t.desk)+' · raised '+esc(fmtD(t.raised))+(t.pend?' · <span class="amber">'+esc(t.pend)+'</span>':'')+'</div></div><div class="rt">'+(t.act&&canAct(l)?'<button class="btn sm" data-flow="'+t.act+'" data-line="'+l.id+'">'+esc(t.actLbl)+'</button>':'')+'<button class="btn sm ghost" data-go="ticket" data-id="'+t.id+'">Open ticket</button></div></div>'; }).join('')+'</div>':empty('ticket','No tickets on this line','A placement ticket opens when the RFQ is floated, a payment ticket when the request is raised, a post-purchase ticket at Payment Completed.'))+'</div>'; }
+  else if(tab==='tickets'){ body='<div class="phhd"><div class="t">Tickets on this line</div><div class="a">'+plural(tks.length,'ticket')+(canAct(l)&&!dead(l)&&svcLineOk(l)?' <button class="btn sm primary" data-flow="lineTicket" data-line="'+l.id+'">'+ic('plus')+'Raise ticket</button>':'')+'</div></div><div class="mt12">'+(tks.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+tks.map(function(t){ return '<div class="row" data-go="ticket" data-id="'+t.id+'"><div class="bd"><b>'+esc(t.id)+'</b> '+chip(t.st,t.tone,true,true)+'<div class="m2">'+esc(t.ty)+' · '+esc(t.desk)+' · raised '+esc(fmtD(t.raised))+(t.pend?' · <span class="amber">'+esc(t.pend)+'</span>':'')+'</div></div><div class="rt">'+(t.act&&canAct(l)?'<button class="btn sm" data-flow="'+t.act+'" data-line="'+l.id+'">'+esc(t.actLbl)+'</button>':'')+'<button class="btn sm ghost" data-go="ticket" data-id="'+t.id+'">Open ticket</button></div></div>'; }).join('')+'</div>':empty('ticket','No tickets on this line','A placement ticket opens when the RFQ is floated, a payment ticket when the request is raised, a post-purchase ticket at Payment Completed.'))+'</div>'; }
   else if(tab==='tasks'){ body='<div class="phhd"><div class="t">Tasks on this line</div>'+(isMine(l)?'<button class="btn sm" data-flow="addTask" data-line="'+l.id+'">'+ic('plus')+'Add task</button>':'')+'</div><div class="mt12">'+(ltasks.length?'<div class="rowlist" style="border:1px solid var(--border);border-radius:12px">'+ltasks.map(function(t){return taskRow(t,{who:t.owner!==S.user});}).join('')+'</div>':empty('checks','No open tasks on this line','Rules create tasks when the line enters a stage; call outcomes create follow-ups; you can add your own.'))+'</div>'; }
   else if(tab==='manage'){ body=manageTab(l); }
   var w=actingParty(l), p=prio(l);
@@ -145,7 +145,7 @@ SCREENS.line=function(){
     (l.status==='park'?'<div class="banner amber mt12">'+ic('clock','ic14')+'<span><b>Time Pending</b> — revisit '+esc(fmtD(l.revisit))+' · '+esc(l.reason)+'. The stage is untouched. It comes back to Open on that date.</span></div>':'');
   var html='<div class="lhd"><div class="crumbs"><button data-go="acct" data-id="'+a.id+'">'+esc(a.n)+'</button>'+ic('chevright','ic14')+(o?'':'<span class="b">Renewal</span>'+ic('chevright','ic14'))+'<b>'+esc(l.product)+'</b></div>'+
     '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(l.product)+'</div><div class="metaline"><span class="b">'+esc(a.n)+'</span><span class="sep">·</span><span>'+esc(l.id)+'</span></div></div><span class="sp"></span>'+
-      '<div class="acts"><span class="ownchip" title="Owner of this product line">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+'</span>'+(canTakeOver(l)?'<button class="btn sm" data-flow="takeover" data-line="'+l.id+'">Take ownership</button>':'')+(S.data.took.indexOf(l.id)>=0&&isMine(l)?'<button class="btn sm outline" data-flow="handback" data-line="'+l.id+'">Hand back</button>':'')+ovf+'</div></div>'+axes+'</div>'+
+      '<div class="acts"><span class="ownchip" title="Owner of this product line">'+avatar(uname(l.owner),true)+esc(uname(l.owner))+abOwnerTag(l)+'</span>'+abLineChips(l)+(canTakeOver(l)?'<button class="btn sm" data-flow="takeover" data-line="'+l.id+'">Take ownership</button>':'')+(S.data.took.indexOf(l.id)>=0&&isMine(l)?'<button class="btn sm outline" data-flow="handback" data-line="'+l.id+'">Hand back</button>':'')+ovf+'</div></div>'+axes+'</div>'+
     banners+'<div class="mt12">'+stageTrack(l)+'</div>'+
     '<div class="lw mt16"><div class="lz lc">'+
     '<div class="tabs">'+tabs.map(function(t){return '<button data-uiset="ltab_'+l.id+'" data-uv="'+t[0]+'"'+(tab===t[0]?' class="on"':'')+'>'+t[1]+(t[0]==='tasks'&&ltasks.length?' ('+ltasks.length+')':'')+(t[0]==='tickets'&&tks.length?' ('+tks.length+')':'')+'</button>';}).join('')+'</div>'+
@@ -202,7 +202,7 @@ function qcrSection(l){
 function quotesTab(l){
   var h='';
   if(l.rate===null||l.rate===undefined){
-    return empty('file','Nothing to quote yet','DUA or non-DUA is decided when the requirement is captured. A DUA line gets the rater’s quotes straight away; a non-DUA line gets the RFQ on this tab.');
+    return empty('file','No quotes yet','The quotes decide the route: one or more rater quotes → DUA; none → the RFQ flow on this tab.',l.stage>=3&&canAct(l)?'<button class="btn primary" data-flow="qfetch" data-line="'+l.id+'">Get quotes</button>':'');
   }
   if(l.rate===1){
     if(l.stage<8){
@@ -257,7 +257,7 @@ function runSim(k,l){
     if(k==='plcQuery'){ l.plcQ=1; l.qAt=0; logAdd(l,'Placement raised a query','System · ticket PLC-'+l.id.slice(3)+' · '+PLC_QUERY,'sys',1); }
     if(k==='extNone'){ l.allDecl=1; logAdd(l,'Placement ticket responded — every insurer declined','System · ticket PLC-'+l.id.slice(3)+' · no quotes on round '+l.round,'sys',1); moveStage(l,7,'Placement ticket responded with no quotes'); }
     if(k==='extPlc'){ l.allDecl=0; l.qAt=S.now; logAdd(l,'Quotes returned by placement','System · ticket PLC-'+l.id.slice(3),'sys',1); moveStage(l,7,'Quotes received from placement'); }
-    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; logAdd(x,'Payment details returned by Ops','System · ticket '+payRef(x)+' · '+payModeOf(x),'sys',1); }); }
+    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; x.payDesk=3; x.payDeskAt=S.now; logAdd(x,'Payment details sent by Ops','System · ticket '+payRef(x)+' · desk stage Payment details sent · '+payModeOf(x),'sys',1); }); }
     if(k==='extPaid'){ logAdd(l,'Payment screenshot received from client','System · on email','pay',1); }
     if(k==='extTake'){ var u=userById(l.owner); var m=u&&u.mgr?u.mgr:'vikram'; if(S.data.took.indexOf(l.id)<0) S.data.took.push(l.id); l.prevOwner=l.owner; l.owner=m; logAdd(l,'Owner changed from '+uname(l.prevOwner)+' to '+uname(m)+' — client escalation','by '+uname(m)+' · Take ownership','sys',1); }
     if(k==='cholaPaid'){ if(cholaLinkExpired(l)) return; var a=acctOf(l), rm=rmFor(a,l.product);
@@ -270,10 +270,10 @@ function runSim(k,l){
       logAdd(l,'Owner changed from '+uname(l.owner)+' to '+uname(rm)+' — Transfer at payment','by the system · issued in real time','sys',1);
       l.owner=rm; tasksOfLine(l.id).forEach(function(t){ if(!t.done) t.owner=rm; }); if(a) a.own=rm;
       moveStage(l,12,'Paid on Chola link · policy issued in real time'); }
-    if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-CHOLA_TTL-1; logAdd(l,'Payment link expired','System · the 24-hour Cholamandalam link lapsed unpaid · regenerate to send a fresh link','sys',1); }
+    if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-instTTL(l)-1; logAdd(l,'Payment link expired','System · the '+validTx(l)+' '+shortIns(l.picked)+' link lapsed unpaid · regenerate to send a fresh link','sys',1); }
   },'the simulated event');
   if(!ok) return;
-  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops returned the payment details','Stage stays at Purchase Requested — share them with the client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
+  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops sent the payment details','Desk stage Payment details sent. The line stays at Purchase Requested — share them with the client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
   paint(); toast(msg[0],msg[1]);
 }
 
@@ -301,7 +301,7 @@ function callReady(){
   if(S.sel.d==='cb'){ if(!(S.sel.cbat||'')||new Date(S.sel.cbat).getTime()<=S.now) return false; }
   var e=callErr(); for(var k in e) return false; return true;
 }
-FLOWS.call={t:function(){ var l=FL(); return S.sel.ctc?'Call outcome':(l&&l.stage===1?'First Contact':'Log call'); },
+FLOWS.firstCall={t:function(){ var l=FL(); return S.sel.ctc?'Call outcome':(l&&l.stage===1?'First Contact':'Log call'); },
   /* [stated 23 Sep] a call placed from here must be dispositioned — there is no way out of this modal until an outcome is picked */
   sub:function(){ return S.sel.ctc?'The call is over and it is on the record. Pick what happened — this cannot be skipped.':'Pick the outcome. The stage follows from it — you never type a stage.'; },
   locked:function(){ return !!S.sel.ctc; }, nocancel:function(){ return !!S.sel.ctc; },
@@ -410,7 +410,7 @@ function reqDone(l){ var c=reqCount(l); return !!reqTpl(l.product)&&c.m>0&&!c.mi
 function reqOnlineN(l){ var o=l.reqOnline||{}; return Object.keys(o).filter(function(k){return o[k];}).length; }
 /* [stated 26 Sep · 6.1 §8] editable until the RFQ is floated (Non-DUA) or the QCR is sent (DUA) */
 function reqLocked(l){ return (l.rfq&&l.rfq.st==='floated')||(l.rate===1&&l.stage>=8)||l.stage>=9; }
-function reqField(l,x,e){ var q=x.q, v=reqGet(l,x.k,true), on=(l.reqOnline||{})[x.k]&&S.sel[x.k]===undefined, hint=on?'answered online — confirm on call':'';
+function reqField0(l,x,e){ var q=x.q, v=reqGet(l,x.k,true), on=(l.reqOnline||{})[x.k]&&S.sel[x.k]===undefined, hint=on?'answered online — confirm on call':'';
   var ctl= q.k==='pick'?select(x.k,v,[['','Choose…']].concat(q.o)) : (q.k==='yn'?seg(x.k,[['y','Yes'],['n','No']],v) : (q.k==='date'?'<input class="inp" id="f_'+x.k+'" data-f="'+x.k+'" type="date" value="'+esc(v)+'">':input(x.k,v,q.ph||'')));
   return field(x.t,ctl,hint,e[x.k]); }
 FLOWS.disc={t:function(){ var l=FL(); return l.renews?'Update the renewal details':'Capture requirement'; },
@@ -440,14 +440,12 @@ FLOWS.disc={t:function(){ var l=FL(); return l.renews?'Update the renewal detail
       logAdd(l,'Requirement captured — '+c.m+' of '+c.m+' answered',uname(S.user),'note');
       if(l.stage===1) made=moveStage(l,2,'First contact logged');
       made=(made||[]).concat(moveStage(l,3,'Every discovery question answered'));
-      if(l.rate===null||l.rate===undefined){ l.rate=RATEABLE[l.product]?1:0; logAdd(l,'Classified '+(l.rate?'DUA — rated by the system':'Non-DUA — quoted by placement'),'System · read from the requirement','sys',1);
-        if(l.rate) logAdd(l,'Rater returned prices','System · '+dauQuotes(l).filter(function(q){return q.st==='quoted';}).length+' insurers priced, '+dauQuotes(l).filter(function(q){return q.st==='declined';}).length+' declined · no RFQ needed','sys',1);
-        else { rfqOpen(l,a,S.now); logAdd(l,'RFQ opened on screen','System · for '+l.product,'rfq',1); } } },'the requirement');
+      if(isRen(l)&&(l.rate===null||l.rate===undefined)){ l.rate=0; rfqOpen(l,a,S.now); } },'the requirement');
     if(!ok) return 'fail';
     var c=reqCount(l);
-    if(before<3&&l.stage>=3) toast('Discovery complete — '+(l.rate?'DUA':'Non-DUA'),l.rate?'Rater quotes are in. Pick what goes in the QCR.':'The RFQ is open. Fill it, then float it or send it for client review.');
+    if(before<3&&l.stage>=3&&(l.rate===null||l.rate===undefined)){ closeFlow(); openFlow('qfetch',{line:l.id}); return 'stay'; }
     else toast(c.miss.length?'Saved — '+c.n+' of '+c.m+' answered':'Requirement saved',(c.miss.length?plural(c.miss.length,'question')+' left. The line stays at '+stageName(l.stage)+'.':'')+(dropped?' '+plural(dropped,'answer')+' not saved — they need a number or a date.':'')); }};
-function discErr(){ var l=FL(), e={}; reqQs(l,true).forEach(function(x){ if(S.sel[x.k]===undefined) return; var v=S.sel[x.k]; if(!String(v||'').trim()) e[x.k]='Needed before the line can move on'; else { var b=reqBad(x.q,v); if(b) e[x.k]=b; } });
+function discErr0(){ var l=FL(), e={}; reqQs(l,true).forEach(function(x){ if(S.sel[x.k]===undefined) return; var v=S.sel[x.k]; if(!String(v||'').trim()) e[x.k]='Needed before the line can move on'; else { var b=reqBad(x.q,v); if(b) e[x.k]=b; } });
   if(S.sel.tp!==undefined&&(S.sel.tp||'').trim()&&!/\d/.test(S.sel.tp)) e.tp='Enter a number';
   if(S.sel.gst!==undefined&&(S.sel.gst||'').trim()){ var g=gstErr(S.sel.gst.trim().toUpperCase()); if(g) e.gst=g; }
   return e; }
@@ -459,7 +457,7 @@ function reqSection(l,full){
   var head='<div class="phhd"><div class="t">Requirement</div><div class="a">'+(c.miss.length?c.n+' of '+c.m+' answered':chip('Complete','green',false,true))+' '+act+'</div></div>';
   if(!c.n&&!Object.keys(onl).length) return head+'<div class="mt8">'+empty('file','Not captured yet','The '+esc(l.product)+' questions open from the discovery call, or from Capture requirement.')+'</div>';
   var row=function(k,lab,val,mk){ return '<div class="rqrow"><span>'+esc(lab)+'</span><b'+(val?'':' class="meta"')+'>'+(val?esc(val):'— not answered')+'</b>'+(mk?'<i>'+esc(mk)+'</i>':'')+'</div>'; };
-  var fmtV=function(x){ var v=reqGet(l,x.k); if(x.q.k==='yn') return v==='y'?'Yes':(v==='n'?'No':''); if(x.q.k==='date'&&v) return fmtD(new Date(v).getTime()); return v; };
+  var fmtV=function(x){ var v=reqGet(l,x.k); if((x.k==='si'||x.k==='cybcov')&&v) return siDisp(l,v); if(x.q.k==='yn') return v==='y'?'Yes':(v==='n'?'No':''); if(x.q.k==='date'&&v) return fmtD(new Date(v).getTime()); return v; };
   var cy=l.reqCarry||{};
   var list='<div class="rqlist mt8">'+c.qs.map(function(x){ return row(x.k,x.t,fmtV(x),onl[x.k]?'answered online — confirm on call':(cy[x.k]&&reqGet(l,x.k)?'carried over from '+cy[x.k]:'')); }).join('')+
     row('tp','Target premium',reqGet(l,'tp'),'')+(a.prov?row('gst','GSTIN',a.gst||'','requested — not holding anything up'):'')+(reqGet(l,'note')?row('note','Note',reqGet(l,'note'),''):'')+'</div>';
@@ -555,7 +553,7 @@ function cholaIssue(l){
   p.pno=insPolNo(p); p.period=fmtD(S.now)+' – '+fmtD(S.now+365*86400000-86400000); p.issuedAt=S.now;
   a.pols.push(p); l.chola=l.chola||{}; l.chola.policy=p.id;
 }
-function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Details returned':(l.pay==='shared'?'Shared with client':'Paid'))); }
+function soldBlock(l){ var payTx; if(isChola(l)){ payTx=(l.chola&&l.chola.paid)?'Paid on the Cholamandalam link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.kyc)?'KYC cleared':'In KYC')); } else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops':(l.pay==='back'?'Payment details sent':(l.pay==='cheque'?'Cheque — to collect':(l.pay==='shared'?'Shared with client':'Paid')))); }
   return '<div class="phhd"><div class="t">Sold</div></div><div class="kvgrid mt12">'+kv('Insurer',esc(l.picked||l.ins||'—'))+kv('Confirmed premium','<b>'+INR(premOf(l))+'</b>')+kv('Payment',esc(payTx))+'</div>'; }
 function docsTab(l){ var a=acctOf(l), p=polOfLine(l), ins=l.picked||l.ins||'the insurer';
   var rows=[docRow('Quote Comparison Report',true,'',{line:l.id},'The quotes the client compared'),

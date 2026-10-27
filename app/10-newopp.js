@@ -66,7 +66,7 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
     return field('GSTIN',input('gst',S.sel.gst,'29AAACS1234F1Z5','style="text-transform:uppercase"'),'','')+
       '<div class="err" id="e_gst" style="margin-top:-10px">'+esc(st.e.gst||'')+'</div><div class="hint" id="h_gst" style="margin-top:-8px">'+st.hint+'</div>'+
       '<label class="field"><div class="lbl">Company name (as per PAN)</div>'+input('name',st.locked?st.name:(S.sel.name||''),'The registered name, not a brand name',st.locked?'disabled':'')+'<div class="hint" id="h_name">'+(st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.')+'</div></label>'+
-      '<div class="fgrid">'+field('POC name',input('cn',S.sel.cn,'Who you are speaking to'))+field('POC mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+'</div>'+
+      (st.locked?'':'<div class="fgrid">'+field('Communication address',input('caddr',S.sel.caddr,'Where letters and documents go'))+field('GST address — optional',input('gaddr',S.sel.gaddr,'As on the GST certificate'),'Leave blank to read it from the GST certificate at KYC.')+'</div>')+'<div class="fgrid">'+field('POC name',input('cn',S.sel.cn,'Who you are speaking to'))+field('POC mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+'</div>'+
       '<div class="fgrid">'+field('POC email',input('e',S.sel.e,'name@company.in'),'',st.e.e)+
         '<label class="field"><div class="lbl">Product</div>'+select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS))+'<div class="hint amber" id="h_prod">'+esc(st.warn)+'</div></label></div>'+
       '<div class="field"><div class="lbl">Business type</div><div class="fgrid">'+
@@ -81,7 +81,7 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
     if(g('h_prod')) g('h_prod').textContent=st.warn;
     [['f_m',st.e.m],['f_e',st.e.e]].forEach(function(x){ var el=g(x[0]); if(!el) return; var lab=el.closest('.field'); if(!lab) return; var er=lab.querySelector('.err'); if(x[1]){ if(!er){ er=document.createElement('div'); er.className='err'; lab.appendChild(er); } er.textContent=x[1]; } else if(er) er.remove(); }); },
   can:function(){ if(S.sel.done) return false; if(S.sel.acct){ var _AA=by(S.data.accounts,S.sel.acct); return !!_AA&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt&&!!S.sel.con; } var gst=noVal('gst').toUpperCase(); if(gstErr(gst)) return false; var m=matchAcct('',gst);
-    var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&!!noVal('cn')&&digits(noVal('m')).length>=10&&!!noVal('e')&&!emailErr(noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
+    var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&((m&&m.a)?true:!!noVal('caddr'))&&!!noVal('cn')&&digits(noVal('m')).length>=10&&!!noVal('e')&&!emailErr(noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
   ok:function(){ if(S.sel.acct){ return 'Create on '+S.sel.acct; } var m=matchAcct('',noVal('gst')); return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
   run:function(){ if(S.sel.acct){ var aa=by(S.data.accounts,S.sel.acct); if(!aa) return 'fail'; var rr={};
       var ok2=write(function(){ var c=aa.con.filter(function(x){return x.n===S.sel.con&&!x.dep;})[0]||aa.con[0]||{n:'',e:'',m:''};
@@ -91,7 +91,7 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
       if(!ok2) return 'fail'; S.sel={done:rr}; paint(); toast('Opportunity created','On '+aa.n+'. The opportunity is yours.'); return 'stay'; }
     var gst=noVal('gst').toUpperCase(), m=matchAcct('',gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
     var ok=write(function(){
-      if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); }
+      if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); a.commAddr=noVal('caddr'); a.gstAddr=noVal('gaddr'); }
       var c=conMatch(a,{n:noVal('cn'),m:noVal('m'),e:noVal('e')});
       if(!c){ c={n:noVal('cn'),d:'',m:noVal('m'),e:noVal('e')}; a.con.push(c); }
       var o={id:newOppId(),acct:a.id,type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user,log:[]}; S.data.opps.push(o);

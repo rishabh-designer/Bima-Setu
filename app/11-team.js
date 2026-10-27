@@ -20,12 +20,11 @@ SCREENS.team=function(){
   /* [stated 24 Sep · TBD-53] a new lead is stalled after 3 WORKING days uncalled, not 1 calendar day */
   var uncalled=open_.filter(uncalledLate).sort(function(x,y){return x.assignedAt-y.assignedAt;});
   var slip=uncalled.map(function(l){ return {l:l,k:'new',d:workDays(l.assignedAt||l.createdAt,S.now)}; })
-    .concat(quiet.map(function(l){ return {l:l,k:'quiet',d:daysQuiet(l)}; }))
     .sort(function(x,y){return y.d-x.d;});
   var seen={}, slipRows=[]; slip.forEach(function(x){ if(seen[x.l.id]) return; seen[x.l.id]=1; slipRows.push(x); });
   var mine=S.data.lines.filter(function(l){return l.owner===u.id&&openLine(l);});
   var html=hMgrHero(u,'Your team\u2019s escalated tasks and the lines that have stalled. '+esc(team.map(function(x){return x.n.split(' ')[0];}).join(', '))+' \u00b7 '+plural(open_.length,'open line')+'.')+
-    (esc_.length+slipRows.length?'':hMgrClear('Every SLA task is inside its clocks, no new lead has sat '+UNCALLED_DAYS+' working days uncalled, and no open line has gone quiet for '+QUIET_DAYS+' days.'))+
+    (esc_.length+slipRows.length?'':hMgrClear('Every SLA task is inside its clocks and no new lead has sat '+UNCALLED_DAYS+' working days uncalled.'))+
     '<div class="hgap">'+
     (esc_.length?hCard('esc','red','alert','Escalated tasks',hCut('mesc',esc_.map(hMgrTaskRow)),chip(esc_.length,'red',true,true),''):'')+
     (slipRows.length?hCard('slip','amber','clock','Stalled',hCut('mslip',slipRows.map(function(x){

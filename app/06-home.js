@@ -6,8 +6,8 @@ function lineRow(l,line2,act){
   return '<div class="row" data-go="line" data-id="'+l.id+'"><div class="bd">'+lineTx(l)+' '+prioBadge(l)+(line2?'<div class="m2">'+line2+'</div>':'')+'</div>'+
     '<div class="rt">'+(act?'<button class="btn sm" data-go="line" data-id="'+l.id+'">'+esc(act)+'</button>':'')+'</div></div>';
 }
-function taskSrc(t){ if(t.src) return t.src; if(t.rule){ var r=by(S.data.rules,t.rule); return 'Rule · '+(r?r.n:t.rule); } return t.cls==='Manual'?'Added by '+uname(t.by||t.owner):(t.cls==='Follow-up'?'Call outcome':'System'); }
-function taskRow(t,opts){
+function taskSrc0(t){ if(t.src) return t.src; if(t.rule){ var r=by(S.data.rules,t.rule); return 'Rule · '+(r?r.n:t.rule); } return t.cls==='Manual'?'Added by '+uname(t.by||t.owner):(t.cls==='Follow-up'?'Call outcome':'System'); }
+function taskRow0(t,opts){
   opts=opts||{}; var st=taskState(t), l=t.line?lineById(t.line):null, a=t.acct?acctOf(t.acct):null;
   var target = l ? lineTx(l)+(l.status!=='open'?' '+chip(statusTx(l),statusTone(l),false,true):'') : (a ? '<b>'+esc(a.n)+'</b> · account' : '<b>—</b>');
   var mine=t.owner===S.user, mgr=isMgrRole() && (userById(t.owner)||{}).mgr===S.user;
@@ -31,7 +31,7 @@ function hCard(id,tone,icon,title,rows,right,none){ var all=S.ui['hm_'+id], show
   return '<section class="hcard" id="h-'+id+'"><div class="hhd"><span class="hic '+tone+'">'+ic(icon)+'</span><span class="t">'+esc(title)+'</span><span class="sp"></span>'+(right||'')+'</div>'+
     panelOr('h-'+id,function(){ return (rows.length?shown.join(''):'<div class="hempty">'+esc(none||'Nothing here.')+'</div>')+(rows.length>5?'<button class="hmore" data-uiset="hm_'+id+'" data-uv="'+(all?'':'1')+'">'+(all?'Show fewer':(rows.length-5)+' more')+'</button>':''); })+'</section>'; }
 function hLineRow(l,meta){ return '<div class="hrow row" data-go="line" data-id="'+l.id+'"><div class="bd"><div class="tt">'+esc(shortName(acctName(l)))+' <span class="pr">· '+esc(l.product)+'</span> '+prioBadge(l)+'</div><div class="mt">'+meta+'</div></div><div class="rt">'+ic('chevright')+'</div></div>'; }
-function hTaskRow(t){ var l=t.line?lineById(t.line):null, a=t.acct?acctOf(t.acct):null, st=taskState(t);
+function hTaskRow0(t){ var l=t.line?lineById(t.line):null, a=t.acct?acctOf(t.acct):null, st=taskState(t);
   var tgt=l?(shortName(acctName(l))+' · '+l.product):(a?shortName(a.n):'—');
   var lateTx=function(){ var h=Math.round(workMins(t.dueAt,S.now)/60); if(h<1) return 'Overdue'; if(h<9) return 'Overdue by '+h+(h===1?' hour':' hours'); var d=Math.round(h/9)||1; return 'Overdue by '+d+(d===1?' day':' days'); };
   var state=st==='esc'?chip('Escalated · '+lateTx().toLowerCase(),'red',true,true):(st==='over'?chip(lateTx(),'red',true,true):chip('Due '+fmt(t.dueAt).replace(/^today, /,''),'amber',true,true));
@@ -88,7 +88,7 @@ SCREENS.home=function(){
     hFreshCard(b.fresh.map(function(l){ return {l:l, at:l.assignedAt, meta:'<span>assigned '+esc(hWhen(l.assignedAt))+(l.src?' · '+esc(l.src):'')+'</span>'}; }))+
     hTaskCard(tk)+
     (1?hCard('move','amber','zap','Action required', b.move.map(function(l){ return hLineRow(l,'<span>'+esc(nextAction(l).txt)+'</span>'); }), chip(b.move.length,'amber',false,true)):'')+
-    (1?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
+    (0?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
     '</div>'+
     '<div class="mt16">'+inboundSim()+'</div>';
   return {sc:'Home', html:html};
@@ -111,7 +111,7 @@ SCREENS.rmhome=function(){
 SCREENS.pipeline=function(){
   var u=me(), f=S.ui.pf||(isRmRole(u)?'all':'open'), q=(S.ui.pq||'').toLowerCase(), prod=S.ui.pprod||'', st=S.ui.pstage||'';
   /* [stated 23 Sep] scoped by the view switch — own lines, or the team's */
-  var lines=S.data.lines.filter(function(l){return inScope(l.owner,u);}), tv=teamView(u);
+  var lines=S.data.lines.filter(function(l){return inScope(l.owner,u)||abCo(l,u);}), tv=teamView(u);
   var wonMine=S.data.lines.filter(function(l){return l.soldBy===u.id && l.stage>=SALES_STAGES && !dead(l);});
   var counts={open:lines.filter(openLine).length, post:lines.filter(postLine).length, issued:lines.filter(issuedLine).length, park:lines.filter(function(l){return l.status==='park';}).length, closed:lines.filter(dead).length, all:lines.length, won:wonMine.length};
   var rows=(f==='won'?wonMine:lines).filter(function(l){
@@ -137,7 +137,7 @@ SCREENS.pipeline=function(){
 HANDLERS.push(function(t){ if(t.closest('[data-clearpf]')){ S.ui.pq='';S.ui.pprod='';S.ui.pstage=''; paint(); return true; } return false; });
 
 /* ---------- tasks ---------- */
-SCREENS.tasks=function(){
+SCREENS.tasks0=function(){
   var u=me(), all=(u.role==='admin'?S.data.tasks.slice():S.data.tasks.filter(function(t){return t.owner===u.id;})), cls=S.ui.tcls||'', att=S.ui.tatt||'', rec=S.ui.trec||'', sf=S.ui.tst||'';
   var esc2=isMgrRole(u)?escalatedTo(u.id):[];
   var pass=function(t){ if(cls&&t.cls!==cls) return false; if(att==='line'&&!t.line) return false; if(att==='acct'&&t.line) return false;
@@ -150,13 +150,13 @@ SCREENS.tasks=function(){
   var shown=grp.esc.length+grp.over.length+grp.today.length+grp.up.length+esc2.length;
   var html='<div class="hdrow"><div><div class="h1">Tasks</div><div class="sub">Only yours'+(isMgrRole(u)?', plus what has escalated to you':'')+'. Grouped by when, not by kind.</div></div></div>'+
     '<div class="stat mt12"><div class="s"><div class="lbl">Escalated</div><div class="v red">'+cnt.esc+'</div></div><div class="s"><div class="lbl">Overdue</div><div class="v red">'+cnt.over+'</div></div><div class="s"><div class="lbl">Due today</div><div class="v amber">'+cnt.today+'</div></div></div>'+diamonds()+
-    '<div class="flex wrap" style="gap:10px">'+sel('tcls',cls,[['','All classes'],['SLA','SLA'],['Follow-up','Follow-up'],['Manual','Manual']])+sel('tatt',att,[['','Lines and accounts'],['line','On a product line'],['acct','On an account']])+sel('trec',rec,[['','Any record state'],['open','Record open'],['closed','Record closed']])+sel('tst',sf,[['','Any state'],['esc','Escalated'],['over','Overdue'],['today','Due today'],['pending','Upcoming']])+'</div>'+
+    '<div class="flex wrap" style="gap:10px">'+sel('tcls',cls,[['','All classes'],['Call','Call'],['SLA','SLA'],['Follow-up','Follow-up'],['Escalation','Escalation'],['ABM','ABM'],['Manual','Manual']])+sel('tatt',att,[['','Lines and accounts'],['line','On a product line'],['acct','On an account']])+sel('trec',rec,[['','Any record state'],['open','Record open'],['closed','Record closed']])+sel('tst',sf,[['','Any state'],['esc','Escalated'],['over','Overdue'],['today','Due today'],['pending','Upcoming']])+'</div>'+
     '<div class="gap12 mt16">'+(shown||done.length
       ? g('esc2','Escalated to you','red',esc2.filter(pass),true)+g('esc','Escalated','red')+g('over','Overdue','red')+g('today','Due today','amber')+g('up','Upcoming','neutral')+
         (shown?'':'<div class="card">'+empty('checks',open.length?'Nothing matches these filters':'No open tasks',open.length?'Change or clear the filters.':'A task arrives three ways: a rule fires, a call outcome creates a follow-up, or you add one yourself.')+'</div>')+
         (done.length?'<section class="card"><div class="cardh"><span class="t">Done this week</span>'+chip(done.length,'green',false,true)+'</div><div class="rowlist">'+done.sort(function(x,y){return y.doneAt-x.doneAt;}).map(function(t){return taskRow(t);}).join('')+'</div></section>':'')
       : empty('checks','Nothing here yet','A task arrives three ways: a rule fires when a line enters a stage, a call outcome creates a follow-up, or you add one yourself.','<button class="btn" data-flow="addTask">'+ic('plus')+'Add task</button>'))+'</div>'+
-    '<div class="mt16">'+note('violet','Escalation','SLA tasks escalate to your manager after their second clock. Follow-up and Manual tasks stop at Overdue — you chose their dates, so nobody is escalated for missing them.','info')+'</div>';
+    '<div class="mt16">'+note('violet','Call tasks and to-dos','Call tasks close through the call: Call Now places an Ozonetel click-to-call; a call that does not connect closes the task and creates the next one. To-dos close when you mark them done. Pending until due, then Overdue (only you see it), then Escalated to your manager.','info')+'</div>';
   return {sc:'Tasks', html:html, cta:'<button class="btn primary sm" data-flow="addTask">'+ic('plus')+'Add task</button>'};
 };
 FLOWS.addTask={t:'Add a task', sub:'For yourself, on a product line or an account. Class is always Manual — a user cannot create an SLA task.',
@@ -199,14 +199,14 @@ FLOWS.closeTask={t:'Close an escalated task', sub:'It leaves the owner’s list 
 
 /* ---------- tickets: placement, payment, post-purchase, endorsements and claims — one list ---------- */
 function ticketRows(u){
-  var rows=[], ADMIN=(u.role==='admin'), mineLines=function(l){ return ADMIN||l.owner===u.id; };
+  var rows=[], ADMIN=(u.role==='admin'), mineLines=function(l){ return ADMIN||l.owner===u.id||abCo(l,u); };
   /* [stated 23 Sep] the view switch scopes this list too */
   var scopeLines = hasViews(u)&&!teamView(u) ? mineLines
                  : (u.role==='mgr' ? function(l){ var o=userById(l.owner); return l.owner===u.id||(o&&o.mgr===u.id); }
                  : (u.role==='rmhead' ? function(l){ var o=userById(l.owner); return (o&&o.mgr===u.id)||l.owner===u.id; } : mineLines));
   var scopeAcct = function(a){ if(!a) return false; if(ADMIN) return true;
     if(hasViews(u)&&!teamView(u)) return a.own===u.id||linesOfAcct(a.id).some(mineLines);
-    if(u.role==='rm') return a.own===u.id;
+    if(u.role==='rm'||u.role==='abm'||u.role==='abmmgr') return a.own===u.id||abCoA(a,u);
     if(u.role==='rmhead') return a.own===u.id||rmTeam(u.id).some(function(x){return x.id===a.own;});
     if(u.role==='mgr') return linesOfAcct(a.id).some(scopeLines);
     return linesOfAcct(a.id).some(mineLines); };
@@ -263,7 +263,7 @@ FLOWS.lineTicket={t:'Raise a ticket', sub:function(){ var l=FL(); return esc(acc
 
 /* [stated 27 Sep] Raise ticket on the Tickets list: pick the product line, then the same list the
    line's own Tickets tab shows — each ticket Ready, or Not yet with the reason. */
-function raiseLines(u){ u=u||me(); return S.data.lines.filter(function(l){ return l.owner===u.id&&!dead(l); }); }
+function raiseLines(u){ u=u||me(); return S.data.lines.filter(function(l){ return (l.owner===u.id||abCo(l,u))&&!dead(l); }); }
 function lineReadyN(l){ return lineTicketOpts(l).filter(function(o){return !o.why;}).length; }
 FLOWS.pickTicket={t:'Raise a ticket', sub:'Pick the product line it is for.', nofoot:function(){return true;},
   repaintOn:['pl'],

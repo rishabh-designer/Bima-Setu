@@ -142,7 +142,7 @@ function condPlain(c){ var op=c.op==='isnot'?' is not ':' is ';
   if(c.type==='ident') return 'account identity'+op+(c.value==='verified'?'Verified':'Provisional');
   if(c.type==='payreq') return 'payment request'+op+PAYREQ_LBL[c.value];
   return '“'+(c.task||'…')+'”'+op+tstateLabel(c.value); }
-var PAYREQ_LBL={none:'not raised',ops:'with Ops',back:'details returned',shared:'shared',paid:'paid'};
+var PAYREQ_LBL={none:'not raised',ops:'with Ops',back:'payment details sent',shared:'shared',paid:'paid'};
 function condHtml(c){ var op=c.op==='isnot'?' is not ':' is ';
   if(c.type==='stage') return 'stage'+op+'<b>'+esc(c.value+' · '+stageName(+c.value))+'</b>';
   if(c.type==='status') return 'status'+op+'<b>'+esc(statusLabel(c.value))+'</b>';

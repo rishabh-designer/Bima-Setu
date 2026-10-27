@@ -47,8 +47,8 @@ SCREENS.adminhome=function(){
       adminTile('rules','settings','Task configurator','Rules that create and close tasks — conditions, timing, escalation.')+
       adminTile('leadassign','list','Lead assignment','Round-robin groups and value rules for website leads.')+
       adminTile('leadprio','refresh','Lead prioritisation','P0–P3 priority by the funnel stage a website lead dropped from.')+
-      adminTile('rmalloc','handshake','RM allocation','Which RM owns an account after payment — by GWP/revenue band and region.')+adminTile('rulecfg','settings','Working calendar & checks','Working days, hours, holidays and the hourly/daily rule checks.')+
-      adminTile('masters','building','Reference masters','Products, insurers, sources, reasons, payment modes and fallback users.')+
+      adminTile('masterusers','users','Users','Everyone who signs in — function, role, who they report to, active or not.')+adminTile('rmalloc','handshake','RM allocation','Which RM owns an account after payment — by GWP/revenue band and region.')+adminTile('qmaster','file','Question Master','Every RFQ question, defined once and mapped to products. Excel bulk upload.')+adminTile('masterabm','refresh','ABM assignment','Round robin across the ABM executives at Payment Completed — who is in the pool, in what order, who is next.')+adminTile('rulecfg','settings','Working calendar & checks','Working days, hours, holidays and the hourly/daily rule checks.')+
+      adminTile('masters','building','Reference masters','Products, insurers, sources, reasons, payment modes and the fallback users.')+
     '</div></div>';
   return {sc:'Admin console', html:html};
 };
@@ -66,7 +66,7 @@ SCREENS.masters=function(){
       adminTile('rules','settings','Task configurator','Rules that create and close tasks.')+
       adminTile('leadassign','list','Lead assignment','Round-robin groups and value rules.')+
       adminTile('leadprio','refresh','Lead prioritisation','Priority by funnel drop-off stage.')+
-      adminTile('rmalloc','handshake','RM allocation','Post-payment RM owner by band + region.')+adminTile('rulecfg','settings','Working calendar & checks','Days, hours, holidays, check schedule.')+
+      adminTile('masterusers','users','Users','People, roles and who reports to whom.')+adminTile('rmalloc','handshake','RM allocation','Post-payment RM owner by band + region.')+adminTile('qmaster','file','Question Master','RFQ questions and their product mapping.')+adminTile('masterabm','refresh','ABM assignment','Round robin pool of ABM executives.')+adminTile('rulecfg','settings','Working calendar & checks','Days, hours, holidays, check schedule.')+
     '</div></div>'+
     '<div class="h4 mt16 mb12">Reference lists</div>'+
     tbl('Products',['Product','Category','Type'],prod)+
@@ -77,7 +77,7 @@ SCREENS.masters=function(){
     tbl('Payment modes',['Mode'],one(PAYMODE))+
     tbl('Park (Time Pending) reasons',['Reason'],one(PARK))+
     tbl('Disqualification reasons',['Reason'],one(DISQ))+
-    tbl('Fallback users',['Category','Fallback sales user (fresh)','Fallback RM (existing client)'],fb)+
+    fbCard()+
     '<div class="mt16">'+note('neutral','Working calendar','Working days Mon–Fri, '+c.ws+':00–'+c.we+':00, with '+plural(c.hol.length,'holiday')+' marked. The daily rule check runs at '+c.dailyH+':00. Open it from Working calendar & checks above.','info')+'</div>'+
     '<div class="mt12">'+note('violet','Editing','Task rules, the working calendar, lead assignment and lead prioritisation are editable. Inline editing of the reference lists above is the next build.','info')+'</div>';
   return {sc:'Masters', html:html};
@@ -177,13 +177,13 @@ function flowLocked(){ var f=FLOWS[S.flow]; return !!(f&&f.locked&&f.locked()); 
 function navFor(u){ if(u.role==='admin') return [['adminhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['renewals','Renewals',ic('refresh','ic22')],['tickets','Tickets',ic('ticket','ic22')],['tasks','Tasks',ic('checks','ic22')],['masters','Masters',ic('settings','ic22')]];
   /* [stated 23 Sep] My view works the way the executive's does, nav included */
   if(hasViews(u)&&!teamView(u)) return u.role==='rmhead'
-    ? [['rmhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]]
-    : [['home','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
-  if(u.role==='mgr') return [['team','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
+    ? [['rmhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Call tasks',ic('settings','ic22')]]
+    : [['home','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Call tasks',ic('settings','ic22')]];
+  if(u.role==='mgr') return [['team','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Call tasks',ic('settings','ic22')]];
   if(u.role==='rm') return [['rmhome','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
   /* [stated 24 Sep · TBD-54] the head of RM gets Pipeline in Team view too — her team's
      post-purchase lines were otherwise reachable only through home cards and Tickets */
-  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Task rules',ic('settings','ic22')]];
+  if(u.role==='rmhead') return [['rmteam','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['renewals','Renewals',ic('refresh','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','My tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')],['rules','Call tasks',ic('settings','ic22')]];
   return [['home','Home',ic('home','ic22')],['pipeline','Opportunities',ic('list','ic22')],['accounts','Accounts',ic('building','ic22')],['tasks','Tasks',ic('checks','ic22')],['tickets','Tickets',ic('ticket','ic22')]];
 }
 function navBadge(v,u){
@@ -195,7 +195,7 @@ function navBadge(v,u){
   if(v==='tickets'){ return ticketRows(u).filter(function(r){return r.need;}).length; }
   return 0;
 }
-function activeNav(){ var v=S.route.v, u=me(); if(v==='opp'||v==='opps') return 'opps'; if(v==='home'||v==='rmhome'||v==='team'||v==='rmteam') return homeRoute(u); if(v==='line'||v==='pipeline'){ if(hasViews(u)&&teamView(u)) return homeRoute(u); return 'pipeline'; } if(v==='acct'||v==='accounts'||v==='policy') return 'accounts'; if(v==='ticket'||v==='tickets'||v==='svctix'||v==='svcnew'||v==='svc') return 'tickets'; if(v==='masters'||v==='leadassign'||v==='leadprio'||v==='rmalloc') return 'masters'; if(v==='rule'||v==='rules'||v==='rulesim'||v==='rulecfg') return isRole('admin')?'masters':'rules'; return v; }
+function activeNav(){ var v=S.route.v, u=me(); if(v==='opp'||v==='opps') return 'opps'; if(v==='home'||v==='rmhome'||v==='team'||v==='rmteam') return homeRoute(u); if(v==='line'||v==='pipeline'){ if(hasViews(u)&&teamView(u)) return homeRoute(u); return 'pipeline'; } if(v==='acct'||v==='accounts'||v==='policy') return 'accounts'; if(v==='ticket'||v==='tickets'||v==='svctix'||v==='svcnew'||v==='svc') return 'tickets'; if(v==='masters'||v==='masterusers'||v==='leadassign'||v==='leadprio'||v==='rmalloc'||v==='qmaster'||v==='masterabm') return 'masters'; if(v==='rule'||v==='rules'||v==='rulesim'||v==='rulecfg') return isRole('admin')?'masters':'rules'; return v; }
 
 
 /* [stated 27 Sep] sub-lines are one line; the full text is on hover when it is cut */
@@ -283,7 +283,7 @@ document.addEventListener('click',function(e){
   if(t.closest('[data-commit]')){ commit(); return; }
   if(t.closest('[data-alt]')){ var f=FLOWS[S.flow]; if(f&&f.alt){ if(typeof f.alt.run==='function'){ f.alt.run(); } else openFlow(f.alt.flow,{line:S.sel.line}); } return; }
   if(t.classList.contains('ovl')){ if(flowLocked()) return; closeFlow(); return; }
-  if(x=t.closest('[data-flow]')){ if(x.disabled) return; var fi={line:x.dataset.line||(S.route.id||''),acct:x.dataset.acct||''}; ['pre','from','opp','comb'].forEach(function(k){ if(x.dataset[k]) fi[k]=x.dataset[k]; }); if(fi.pre) fi.d=fi.pre; openFlow(x.dataset.flow,fi); return; }
+  if(x=t.closest('[data-flow]')){ if(x.disabled) return; var fi={line:x.dataset.line||(S.route.id||''),acct:x.dataset.acct||''}; ['pre','from','opp','comb','task'].forEach(function(k){ if(x.dataset[k]) fi[k]=x.dataset[k]; }); if(fi.pre) fi.d=fi.pre; openFlow(x.dataset.flow,fi); return; }
 });
 document.addEventListener('input',function(e){
   var t=e.target; if(!(t instanceof Element)) return;

@@ -39,7 +39,7 @@ function renBand(k){ return REN_BANDS.filter(function(b){return b.k===k;})[0]; }
 /* [stated 26 Sep · PD-059] a due date, never elapsed days */
 function renInTx(d){ return 'renewal due '+fmtD(S.now+d*86400000); }
 function renLineOf(pid){ return S.data.lines.filter(function(l){ return l.renews===pid; })[0]||null; }
-function renLines(uid){ return S.data.lines.filter(function(l){ return l.renews&&(!uid||l.owner===uid); }); }
+function renLines(uid){ return S.data.lines.filter(function(l){ return l.renews&&(!uid||l.owner===uid||abCo(l,uid)); }); }
 function renDue(l){ return !dead(l)&&l.stage<SALES_STAGES; }                  /* still to renew */
 function renCancelled(p){ return (S.data&&S.data.svc||[]).some(function(t){ return t.k==='end'&&t.pol===p.id&&t.sub==='Cancellation and refund'&&t.stage==='Completed'; }); }
 
@@ -160,7 +160,7 @@ function renSweep(fire){
 function renHeadChip(l){ var d=renDays(l), h=renPolHit(l); if(!h) return ''; var b=renBand(renBandKey(d));
   return chip('Renewal due '+fmtDs(h.p.exp),renDue(l)?b.tone:'neutral',false,true); }
 function renOverview(l){ var h=renPolHit(l); if(!h) return ''; var p=h.p;
-  return kv('Renews','<button class="link" data-go="policy" data-id="'+esc(p.id)+'">'+esc(p.pno||p.bkno||p.id)+'</button><div class="meta">Renewal due '+esc(fmtD(p.exp))+'</div>'); }
+  return kv('Renews','<button class="link" data-go="policy" data-id="'+esc(p.id)+'">'+esc(p.pno||p.bkno||polNoDisp(p))+'</button><div class="meta">Renewal due '+esc(fmtD(p.exp))+'</div>'); }
 function renFlag(l){ var h=renPolHit(l); if(!h||!(h.p.endo>0)) return '';
   return '<div class="mt16">'+note('amber','Changed since it was issued',esc(h.p.id)+' was endorsed '+plural(h.p.endo,'time')+'. The policy record holds the cover as first issued — check the endorsements before quoting. <button class="link" data-acctpol="'+h.a.id+'">Open the policy</button>','alert')+'</div>'; }
 
@@ -181,7 +181,7 @@ function renTable(rows){
 }
 SCREENS.renewals=function(){
   var u=me(); if(u.role!=='rm'&&u.role!=='rmhead'&&u.role!=='admin') return noAccess('screen');
-  var ids=scopeIds(u), all=renLines().filter(function(l){ return ids.indexOf(l.owner)>=0; }), f=S.ui.rnf||'due', sel=S.ui.rnb||'';
+  var ids=scopeIds(u), all=renLines().filter(function(l){ return ids.indexOf(l.owner)>=0||abCo(l,u); }), f=S.ui.rnf||'due', sel=S.ui.rnb||'';
   var byExp=function(x,y){ var a=renPolHit(x), b=renPolHit(y); return (a?a.p.exp:0)-(b?b.p.exp:0); };
   var due=all.filter(renDue).sort(byExp), renewed=all.filter(function(l){ return !dead(l)&&l.stage>=SALES_STAGES; }).sort(byExp), lost=all.filter(dead).sort(byExp);
   var grp={}; REN_BANDS.forEach(function(b){ grp[b.k]=[]; }); due.forEach(function(l){ grp[renBandKey(renDays(l))].push(l); });

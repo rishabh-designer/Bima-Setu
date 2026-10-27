@@ -14,7 +14,7 @@ function oppRow(o){
 }
 /* payment requests on an opportunity — one per PAY reference, read off the lines */
 function oppPayReqs(o){ var m={}; linesOfOpp(o.id).forEach(function(l){ if(l.pay==='pre'||l.stage<10) return; var r=payRef(l); if(!m[r]) m[r]={ref:r,lines:[],amt:0,by:l.soldBy||l.owner,st:''}; m[r].lines.push(l); m[r].amt+=premOf(l); });
-  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Details returned':(l.pay==='shared'||l.stage===11?'Shared with client':'With Ops')); q.tone=q.st==='Paid'?'green':(q.st==='Details returned'?'amber':'violet'); return q; }); }
+  return Object.keys(m).map(function(k){ var q=m[k], l=q.lines[0]; q.st=l.stage>=SALES_STAGES?'Paid':(l.pay==='back'?'Payment details sent':(l.pay==='cheque'?'Payment mode cheque':(l.pay==='shared'||l.stage===11?'Shared with client':'With Ops'))); q.tone=q.st==='Paid'?'green':(q.st==='Payment details sent'?'amber':'violet'); return q; }); }
 SCREENS.opp=function(){
   var o=by(S.data.opps,S.route.id); if(!o) return SCREENS.notfound();
   { var _l=linesOfOpp(o.id)[0]; if(_l){ S.route={v:'line',id:_l.id}; return SCREENS.line(); } }
@@ -77,7 +77,7 @@ HANDLERS.push(function(t){ var x=t.closest('[data-flow="addLine"]'); if(!x) retu
 /* [stated 23 Sep] scoped by the view switch — scopeIds() is just the person in My view, the whole team in Team view */
 function oppMine(o,u){ var ids=scopeIds(u);
   if(ids.indexOf(o.by)>=0) return true;
-  if(linesOfOpp(o.id).some(function(l){return ids.indexOf(l.owner)>=0;})) return true;
+  if(linesOfOpp(o.id).some(function(l){return ids.indexOf(l.owner)>=0||abCo(l,u);})) return true;
   if(u.role==='rm'||u.role==='rmhead'){ var a=acctOf(o.acct); return !!a&&ids.indexOf(a.own)>=0; }
   return false; }
 SCREENS.opps=function(){

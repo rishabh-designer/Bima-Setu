@@ -38,7 +38,7 @@ function homeRoute(u){ u=u||me(); if(!u) return 'home'; if(u.role==='admin') ret
   if(u.role==='rmhead') return teamView(u)?'rmteam':'rmhome';
   return u.role==='rm'?'rmhome':'home'; }
 function stageName(n){ return STAGES[n-1]?STAGES[n-1].s:'?'; }
-function skipped(l,n){ if(l.renews&&n<=2) return true; if(n===9) return isChola(l)||!(acctOf(l)&&acctOf(l).prov); if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
+function skipped(l,n){ if(l.renews&&n<=2) return true; if(n===9) return !(acctOf(l)&&acctOf(l).prov)&&!l.webKyc; if(l.rate===1) return n>=4&&n<=7; if(l.rate===0&&l.rfq&&l.rfq.direct) return n===4||n===5; return false; } /* DUA: 3 → 8 · non-DUA floated directly: 3 → 6 */
 function routeTx(l){ if(l.renews) return 'Non-DUA · renewal'; return l.rate===null||l.rate===undefined?'Route not known yet':(l.rate?'DUA':(l.routeSwitch?'Non-DUA · switched from DUA':'Non-DUA')); }
 function statusTx(l){ if(l.status==='open'&&l.stage>=SALES_STAGES) return 'Won'; return {open:'Open',park:'Time Pending',lost:'Lost',noapp:'No Appetite',disq:'Disqualified',withdrawn:'Withdrawn',unreach:'Unreachable'}[l.status]||l.status; }
 function statusTone(l){ return l.status==='open'?'green':(l.status==='park'?'amber':'red'); }
@@ -54,7 +54,7 @@ function premOf(l){ if(l.picked){ var q=quotesFor(l).filter(function(x){return x
 function confirmed(l){ return l.stage>=9 && l.status==='open'; }
 
 /* who must act on this line right now */
-function actingParty(l){
+function actingParty0(l){
   /* [stated 26 Sep · 2.1] waiting-on has three values only — Us, Client, Insurer. Placement, Ops
      and the post-purchase desk are internal, so a line waiting on them waits on Us. */
   if(dead(l)||l.stage===15) return '—';
@@ -155,10 +155,10 @@ function myTeam(u){ u=u||me(); return S.data.users.filter(function(x){ return x.
 function inMyTeam(uid,u){ var x=userById(uid); u=u||me(); return !!x&&x.mgr===u.id; }
 /* permissions */
 function canTakeOver(l){ var u=me(), o=userById(l.owner); return !!u&&!!o&&o.mgr===u.id&&l.owner!==u.id&&(openLine(l)||postLine(l)||l.status==='park'); }
-function canAct(l){ var u=me(); return !!u && (u.role==='admin'||l.owner===u.id) && !dead(l); }
+function canAct(l){ var u=me(); return !!u && (u.role==='admin'||l.owner===u.id||abCo(l,u)) && !dead(l); }
 function isMine(l){ var u=me(); return !!u && l.owner===u.id; }
 function readOnlyWhy(l){ var u=me(); if(!u) return ''; if(u.role==='admin') return dead(l)?(closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.'):'';
-  if(l.owner!==u.id){
+  if(l.owner!==u.id&&!abCo(l,u)){
     if(l.soldBy===u.id) return 'Sold by you. Owned by '+uname(l.owner)+' since payment — you keep read access.';
     return 'Owned by '+uname(l.owner)+'.'+(canTakeOver(l)?' You can see everything here; to work it, take ownership.':''); }
   if(dead(l)) return closedTx(l)+'. Closed at '+stageName(l.stage)+' — how far it got is preserved.';
@@ -175,9 +175,9 @@ function ticketsOf(l){
       act: q?'answerQ':(l.stage===7&&!dead(l)?'qcrPlc':''), actLbl: q?'Answer the query':(l.stage===7?'Review the QCR':'')});
   }
   if(l.iss) out.push(issTicket(l));
-  if(l.pay!=='pre' && l.stage>=9 && !isChola(l)){
+  if(l.pay!=='pre' && l.stage>=9 && !isChola(l)){ /* v74: cheque is a notification, closed at once */
     out.push({id:payRef(l), ty:'Payment', desk:'BimaOps', line:l,
-      st: l.pay==='back'?'Details returned':(l.stage>=SALES_STAGES?'Paid':(l.pay==='shared'?'Shared':'With Ops')), tone: l.pay==='back'?'amber':(l.stage>=SALES_STAGES?'green':'violet'),
+      st: payTkSt(l), tone: payTkTone(l),
       raised:payRaisedAt(l), who:uname(l.soldBy||l.owner),
       pend: l.payQ&&!l.payQ.ans?'Ops has a query for you.':(l.pay==='back'?'Payment details are in but the client has not been sent them yet.':''),
       act: l.payQ&&!l.payQ.ans?'payAnswer':(l.pay==='back'?'share':''), actLbl:l.payQ&&!l.payQ.ans?'Answer the query':'Share with client'});
@@ -194,16 +194,16 @@ function closedTx(l){ var e=(l.log||[]).filter(function(x){ return /^Status (set
   var when=l.closedAt||(e?e.at:0), who=l.closedBy?uname(l.closedBy):(e?String(e.m||'').split(' · ')[0]:'');
   return [statusTx(l),l.reason,when?fmtD(when):'',who].filter(Boolean).join(' · '); }
 /* the next action on a line — the S3 sentence, used by the line screen and by Home */
-function nextAction(l){
+function nextAction0(l){
   var st=l.stage, a=acctOf(l);
   if(dead(l)) return {tone:'neutral',lab:'Closed',txt:closedTx(l),why:'Closed at '+stageName(st)+'. How far it got is preserved. A closed line is not reopened.',acts:[]};
   if(st>=SALES_STAGES) return postNextAction(l);
   if(l.status==='park') return {tone:'neutral',lab:'Time Pending',txt:'Time Pending — revisit on '+fmtD(l.revisit)+' · '+(l.reason||''),why:'The stage is unchanged — still at '+stageName(st)+'. It comes back to Open by itself on the revisit date, or when a call connects.',acts:[['resume','Resume']]};
   if(isChola(l)) return cholaSalesNext(l);
   switch((st===11&&l.pay!=='shared'&&l.pay!=='paid')?10:st){
-    case 1: return {tone:'amber',lab:'Next action',txt:'Nobody has spoken to them yet',why:l.inbound?'They came in from the '+(l.src||'website')+' — call them while it is fresh.':'First contact can go straight to discovery if they are ready.',acts:[['ctc',l.inbound?'Call':'First contact'],['call','Log a call manually']]};
+    case 1: return {tone:'amber',lab:'Next action',txt:'Nobody has spoken to them yet',why:l.inbound?'They came in from the '+(l.src||'website')+' — call them while it is fresh.':'First contact can go straight to discovery if they are ready.',acts:[['ctc',l.inbound?'Call':'First contact'],['firstCall','Log a call manually']]};
     /* [stated 24 Sep · TBD-06] 10 calls is the cap; the tenth no-connect closes the line as Unreachable */
-    case 2: var rq2=reqCount(l), on2=reqOnlineN(l); return {tone:'amber',lab:'Next action',txt:on2&&!callsMade(l)?'Answered '+rq2.n+' of '+rq2.m+' online':(rq2.n&&rq2.miss.length?plural(rq2.miss.length,'discovery question')+' left. Call to complete':plural(callsMade(l),'call')+' logged. Reach the decision maker and capture the requirement'),why:(l.inbound&&!callsMade(l)?'Came in from the '+(l.src||'website')+' with the first steps done online — confirm them on the call. ':'')+'Calls are counted per product line. '+(everConnected(l)?'This line has been reached, so the attempt ladder does not apply.':(ATTEMPT_CAP-l.att)+' attempts left before this line closes as Unreachable.'),acts:[['ctc','Call'],['disc','Capture requirement'],['call','Log a call manually']]};
+    case 2: var rq2=reqCount(l), on2=reqOnlineN(l); return {tone:'amber',lab:'Next action',txt:on2&&!callsMade(l)?'Answered '+rq2.n+' of '+rq2.m+' online':(rq2.n&&rq2.miss.length?plural(rq2.miss.length,'discovery question')+' left. Call to complete':plural(callsMade(l),'call')+' logged. Reach the decision maker and capture the requirement'),why:(l.inbound&&!callsMade(l)?'Came in from the '+(l.src||'website')+' with the first steps done online — confirm them on the call. ':'')+'Calls are counted per product line. '+(everConnected(l)?'This line has been reached.':plural(l.miss||0,'missed call')+' since the last connected call.'),acts:[['ctc','Call'],['disc','Capture requirement']]};
     case 3:
       /* [stated 24 Sep] a renewal is always an RFQ line. What it asks depends on whether there
          was an RFQ to carry over — there is none when the fresh buy was priced by the rater. */
@@ -232,16 +232,17 @@ function nextAction(l){
       return {tone:'amber',lab:'Next action',txt:'Quotes are in',why:'QCR v'+l.round+' from placement. Send it from here, download it and send it yourself, or send it back — you do not edit it.',acts:[['act:qcr','Review and share the QCR'],['shareQcr','Download and share myself']]};
     case 8: var d8=daysInStage(l);
       /* [stated 26 Sep · 8.6] quotes are valid 30 days from delivery */
-      if(d8>=QUOTE_VALID) return {tone:'red',lab:'Quotes expired',txt:'The quotes on QCR v'+l.round+' expired '+plural(d8-QUOTE_VALID,'day')+' ago',why:'An expired quote cannot be confirmed. '+(l.rate?'Ask the client whether to re-rate.':'Send the QCR back for fresh quotes.'),acts:l.rate?[['rejectAll','Client rejected every quote']]:[['objectQcr','Send the QCR back for revision']]};
-      return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d8?plural(d8,'day')+' ago':'today'),why:'QCR v'+l.round+' is with '+(l.contact.n||'the client')+'.'+(l.rate?' If they reject every quote, the line switches to the RFQ route.':''),acts:l.rate?[['confirm','Record client confirmation'],['rejectAll','Client rejected every quote'],['resendQcr','Resend']]:[['confirm','Record client confirmation'],['objectQcr','Send the QCR back for revision'],['resendQcr','Resend']]};
+      if(d8>=QUOTE_VALID) return {tone:'red',lab:'Quotes expired',txt:'The quotes on QCR v'+l.round+' expired '+plural(d8-QUOTE_VALID,'day')+' ago',why:'An expired quote cannot be confirmed. '+(l.rate?'Get fresh quotes — a new rater round.':'Send the QCR back for fresh quotes.'),acts:l.rate?[['freshQ','Get fresh quotes'],['rejectAll','Client rejected every quote']]:[['objectQcr','Send the QCR back for revision']]};
+      return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d8?plural(d8,'day')+' ago':'today'),why:'QCR v'+l.round+' is with '+(l.contact.n||'the client')+'.'+(l.rate?' If they reject every quote, the line switches to the RFQ route.':''),acts:[['confirm','Record client confirmation'],['qfollow','Follow up'],l.rate?['rejectAll','Client rejected every quote']:['objectQcr','Send the QCR back for revision']]};
     case 9:
       return {tone:'red',lab:'KYC pending',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request. The opportunity waits here at KYC Details Requested until the client sends them — a KYC drop-off shows separately from a payment drop-off in the funnel.',acts:[['kyc','Get verified']]};
     case 10:
       if(a && a.prov) return {tone:'red',lab:'Blocked',txt:'The account is not KYC verified',why:'PAN and GST are needed before a payment request.',acts:[['kyc','Get verified']]};
       if(l.payQ&&!l.payQ.ans) return {tone:'amber',lab:'Next action',txt:'Ops has a query on '+payRef(l),why:'The ticket is on hold until you answer. The stage does not move.',acts:[['payAnswer','Answer the query'],['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='pre'&&(l.payOld||[]).length&&!(a&&a.prov)) return {tone:'amber',lab:'Next action',txt:'The payment link expired unpaid',why:(l.payOld||[]).slice(-1)[0]+' was closed by Ops. Raise a new request — a ticket is never reopened.',acts:[['pay','Raise a new payment request']]};
+      if(l.pay==='cheque') return {tone:'amber',lab:'Next action',txt:'Collect the cheque from the client',why:'Cheque was the payment mode, so '+payRef(l)+' only notified Ops and closed at once — nothing comes back. Collect the physical cheque, then record it here.',acts:[['chequeIn','Record the cheque collected']]};
       if(l.pay==='ticket') return {tone:'violet',lab:'With Ops',txt:'Payment ticket '+payRef(l)+' with ops',why:'Ops prepares the payment details. They come back here.',acts:[['go:ticket:'+payRef(l),'Open ticket']]};
-      if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details received, not yet sent to the client',why:'Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
+      if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details sent by Ops, not yet sent to the client',why:'Desk stage: Payment details sent. Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
       return {tone:'amber',lab:'Next action',txt:'Ready for a payment request',why:'One request can cover several of your lines on the opportunity.',acts:[['pay','Raise payment request']]};
     case 11: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
   }
@@ -260,7 +261,6 @@ function homeBuckets(uid){
   lines.forEach(function(l){ if(used[l.id]||dead(l)||l.stage>=SALES_STAGES) return;
     if(l.status==='park'){ if(l.revisit<=S.now){ b.move.push(l); used[l.id]=1; } else b.rest.push(l); return; }
     if(actingParty(l)==='Us'){ b.move.push(l); used[l.id]=1; return; }
-    if(daysQuiet(l)>=QUIET_DAYS){ b.quiet.push(l); used[l.id]=1; return; }
     b.rest.push(l); });
   b.move.sort(function(x,y){return daysInStage(y)-daysInStage(x);});
   b.quiet.sort(function(x,y){return daysQuiet(y)-daysQuiet(x);});

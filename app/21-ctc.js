@@ -51,7 +51,7 @@ FLOWS.ctc={
       if(ctcEndKey(ph)){
         var k=ctcEndKey(ph);
         CTC.res={k:k, con:CTC_END[k].con, dur:k==='done'?ctcSecs(S.sel.t0):0, rang:ctcSecs(S.sel.r0), who:w.n, num:w.m, at:S.now};
-        CTC.tm=setTimeout(function(){ var ln=FL(); if(S.flow==='ctc'&&ln) openFlow('call',{line:ln.id, ctc:CTC.res}); },900);
+        CTC.tm=setTimeout(function(){ var ln=FL(); if(S.flow==='ctc'&&ln) ctcAfter(ln,CTC.res,S.sel.task); },900);
       }
     }
 
@@ -62,7 +62,7 @@ FLOWS.ctc={
     if(ph==='dial') return '<div class="ctc">'+head+
       '<div class="ctcst"><i class="dot pulse"></i>Dialling…</div>'+
       give+
-      '<div class="ctcnote">'+esc(l.product)+' · '+esc(acctName(l))+' · the call is placed from your BimaKavach number, and it is recorded.</div></div>';
+      '<div class="ctcnote">'+esc(l.product)+' · '+esc(acctName(l))+' · '+ctcIds(l,S.sel.task)+'</div></div>';
 
     if(ph==='ring') return '<div class="ctc">'+head+
       '<div class="ctcst amber"><i class="dot pulse"></i>Ringing…</div>'+
@@ -71,7 +71,7 @@ FLOWS.ctc={
         simbtn('Nobody picks up','data-mset="ph" data-mval="e_noans"')+
         simbtn('Busy','data-mset="ph" data-mval="e_busy"')+
         simbtn('Switched off','data-mset="ph" data-mval="e_off"'))+'</div>'+
-      '<div class="ctcnote">Nothing is on the record until the call connects — cancelling now leaves the line as it was.</div>'+
+      '<div class="ctcnote">If they do not pick up, the call is logged as not connected, the task closes and the next call task is created.</div>'+
       give+'</div>';
 
     if(ph==='live') return '<div class="ctc">'+head+
@@ -84,7 +84,7 @@ FLOWS.ctc={
     return '<div class="ctc">'+head+
       '<div class="ctcst '+(m.con?'green':'amber')+'"><i class="dot"></i>'+esc(m.lab)+'</div>'+
       '<div class="ctcT mono">'+esc(m.con?mmss(CTC.res?CTC.res.dur:0):'—')+'</div>'+
-      '<div class="ctcnote">'+(m.con?'Call ended after '+esc(durTx(CTC.res?CTC.res.dur:0))+'.':'Rang for '+esc(durTx(CTC.res?CTC.res.rang:0))+' without connecting.')+' Opening the outcome form…</div></div>';
+      '<div class="ctcnote">'+(m.con?'Call ended after '+esc(durTx(CTC.res?CTC.res.dur:0))+'. Opening the outcome form…':'Rang for '+esc(durTx(CTC.res?CTC.res.rang:0))+' without connecting. Logging it as not connected…')+'</div></div>';
   }
 };
 

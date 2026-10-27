@@ -105,15 +105,15 @@ function rowTx(k,r){
   return '';
 }
 function postRowsTx(l){ if(!l.iss) return ''; var r=l.iss.rows; return ['rhl','pf','md','pol'].map(function(k){return rowTx(k,r[k]);}).filter(Boolean).join(' · ')||ISS_STAGE[l.iss.stage]; }
-function issTicket(l){
+function issTicket0(l){
   var i=l.iss, w=issWaiting(l), tone=i.stage==='closed'?'green':(i.stage==='withdrawn'?'red':(w==='Us'?'amber':'violet'));
   return {id:i.id, ty:'Post-purchase', label:'Issuance', desk:'BimaOps · Customer Success', line:l, st:ISS_STAGE[i.stage], tone:tone, raised:i.createdAt, who:'System',
     pend: w==='Us'?'The client sent the filled proposal form. Upload it to the ticket.':(w==='Client'?'Proposal form or mandate still with the client — the RM chases.':''), act: w==='Us'?'uploadPf':'', actLbl:'Upload proposal form'};
 }
 function openRuleTask(l,rule){ return tasksOfLine(l.id).filter(function(t){return !t.done&&t.rule===rule;})[0]||null; }
-function postNextAction(l){
+function postNextAction0(l){
   var i=l.iss, r=i?i.rows:null, w=issWaiting(l), welcome=openRuleTask(l,'TR-08');
-  if(isChola(l)) return cholaPostNext(l);
+  if(isChola(l)&&instCfg(l).policy) return cholaPostNext(l);
   if(l.stage===12) return welcome
     ? {tone:'amber',lab:'Next action',txt:'Paid. Handed over from '+uname(l.soldBy||'sales'),why:'The proposal form and mandate links go out from a generic BimaKavach address the moment Customer Success assigns '+(i?i.id:'the ticket')+' — often before you have called. The email names you.',acts:[['welcome','Welcome call']]}
     : {tone:'violet',lab:'Waiting on post-purchase',txt:(i?i.id:'The ticket')+' created · Customer Success has not assigned it yet',why:'Nothing is needed from you until the document tracks start.',acts:[]};
@@ -124,7 +124,7 @@ function postNextAction(l){
     return {tone:'violet',lab:'Waiting on post-purchase',txt:'Documents in · the desk is moving it on',why:'',acts:[]};
   }
   if(l.stage===14) return r.pol.st==='qc'
-    ? {tone:'amber',lab:'Next action',txt:'Policy copy received — check it before it goes to the client',why:r.pol.inv?'Compare it with the confirmed quote, then approve. It goes out on the three rails.':'Tax invoice · awaited. You can check the copy now; it goes out once the invoice is in.',acts:[['qcApprove','Check and approve']]}
+    ? {tone:'amber',lab:'Next action',txt:'Policy copy received — check it before it goes to the client',why:r.pol.inv?'Open the policy copy, then QC approve — it goes to the client on the three rails.':'Tax invoice · awaited. You can check the copy now; it goes out once the invoice is in.',acts:[['qcApprove','QC approve']]}
     : {tone:'violet',lab:'Waiting on the insurer',txt:'Copy requested from '+(l.picked||l.ins)+' '+plural(daysBetween(r.pol.at||l.enteredAt,S.now),'day')+' ago'+(r.pol.fu||r.pol.esc?' · '+r.pol.fu+' follow-ups, '+r.pol.esc+' escalations':''),why:'Three follow-ups, then three escalations. When all six are exhausted, Ops contacts the insurer outside the ticket. Watch only.',acts:[['go:ticket:'+i.id,'Open ticket']]};
   if(l.stage===15){ var ex=openRuleTask(l,'TR-10'); return ex
     ? {tone:'green',lab:'Issued — one call left',txt:'Policy copy and tax invoice sent to the client. Walk them through the cover',why:'The client already has the documents on the three rails. The policy explanation call is yours.',acts:[['explain','Log policy explanation call']]}
@@ -133,7 +133,7 @@ function postNextAction(l){
 }
 
 /* ---------- simulated events on a post-purchase line (amber dashed) ---------- */
-function postSims(l){
+function postSims0(l){
   var b=[], i=l.iss; if(!i) return b; var r=i.rows, at=function(lab,k){ b.push(simbtn(lab,'data-psim="'+k+'" data-line="'+l.id+'"')); };
   if(l.stage===12&&i.stage==='new') at('Customer Success assigns the ticket — tracks start','assign');
   if(l.stage===13){ if(r.rhl.st==='pending'){ at('Insurer sends the RHL (email bot)','rhl'); at('Desk follow-up to the insurer','csfu'); } if(r.pf.st==='pending'&&r.pf.mode==='dig') at('Client fills the proposal form on Bimakendra','pf'); if(r.pf.st==='pending'&&r.pf.mode==='off'&&!r.pf.recv) at('Client sends the filled offline form to you','pfrecv'); if(r.md.st==='pending') at('Client signs the mandate on Bimakendra','md'); }
@@ -200,7 +200,7 @@ FLOWS.uploadPf={t:'Upload the filled proposal form', sub:'The client filled the 
     note('blue','','Check it first: signatory, date, every section. Once uploaded, Customer Success takes it to the insurer with the policy request.')+
     simblock('Simulate','','<button class="simbtn" data-mset="inc" data-mval="1">Pretend it is incomplete</button><button class="simbtn" data-mset="inc" data-mval="">It is complete</button>'); },
   can:function(){ return !S.sel.inc; }, ok:'Upload to the ticket',
-  run:function(){ var l=FL(); var ok=write(function(){ var r=l.iss.rows; r.pf.st='done'; r.pf.recv=0; r.pf.at=S.now; logAdd(l,'Filled proposal form uploaded to the ticket',uname(S.user)+' · row Completed','post'); completeRuleTasks(l,'TR-09'); issCheckDocs(l); },'the upload'); if(!ok) return 'fail'; toast('Proposal form uploaded',l.stage===14?'That was the last document — policy copy requested, line at Awaiting Policy Copy.':'Row Completed. '+(l.iss.rows.md.st==='pending'?'The mandate is still with the client.':(l.iss.rows.rhl.st==='pending'?'The RHL is still with the insurer.':''))); }};
+  run:function(){ var l=FL(); var ok=write(function(){ var r=l.iss.rows; r.pf.st='done'; r.pf.recv=0; r.pf.at=S.now; logAdd(l,'Filled proposal form uploaded to the ticket',uname(S.user)+' · row Completed · pushed to '+l.iss.id+' on BimaOps','post'); completeRuleTasks(l,'TR-09'); issCheckDocs(l); },'the upload'); if(!ok) return 'fail'; toast('Proposal form uploaded',l.stage===14?'That was the last document — policy copy requested, line at Awaiting Policy Copy.':'Row Completed. '+(l.iss.rows.md.st==='pending'?'The mandate is still with the client.':(l.iss.rows.rhl.st==='pending'?'The RHL is still with the insurer.':''))); }};
 
 FLOWS.reshare={t:'Ask the desk to resend', sub:'The client says it never arrived. The desk resends it from the generic address; your ask is on the RM ↔ desk thread.',
   body:function(){ var l=FL(), r=l.iss.rows, items=[]; if(r.pf.st==='pending') items.push(['pf',r.pf.mode==='off'?'Proposal form PDF':'Proposal form link']); if(r.md.st==='pending') items.push(['md','Mandate letter link']); if(r.rhl.st==='sent') items.push(['rhl','Risk-held letter']); if(r.pol.st==='sent') items.push(['pol','Policy copy and tax invoice']);
@@ -259,7 +259,7 @@ function postDocs(l){
     '<div class="rowlist doclist mt12">'+rows.map(function(x){ return x[5]?'<div class="row dim"><div class="bd"><b>'+esc(x[0])+'</b><div class="m">'+NR+'</div></div></div>':docRow(x[0],x[1],x[2],x[4],x[3]?esc(x[3]):''); }).join('')+'</div>'+
     '<div class="meta mt8">PAN, GST and mandates are under <button class="link" data-uiset="atab_'+dc.acct+'" data-uv="comp" data-go="acct" data-id="'+dc.acct+'">Compliance</button>.</div>';
 }
-function postTab(l){
+function postTab0(l){
   var can=canAct(l), i=l.iss;
   return '<div class="phhd"><div class="t">Post-purchase</div><div class="a">'+esc(i.id)+' · '+esc(ISS_STAGE[i.stage])+' · desk owner '+esc(CS_NAME)+' · '+(i.assignedAt?'assigned '+esc(fmt(i.assignedAt)):'created '+esc(fmt(i.createdAt))+', not assigned yet')+'</div></div>'+
     '<div class="mt12">'+postRowsTable(l,can)+'</div>'+
@@ -272,7 +272,7 @@ function manageTicketBlock(l){
   return '<div class="h3">Manage ticket</div><div class="meta">'+esc(l.iss.id)+' · '+esc(ISS_STAGE[l.iss.stage])+' — the desk works these, not you.</div><div class="rowlist mt8" style="border:1px solid var(--border);border-radius:12px">'+
     '<div><div class="bd"><b>Reminders and escalations</b><div class="m">By section: forms with the RM, RHL with the insurer, policy copy with the insurer. Each has its own reminder.</div></div><div class="rt">'+chip('Customer Success','neutral',false,true)+'</div></div>'+
     '<div><div class="bd"><b>Reassign ticket</b><div class="m">The desk’s record action, not yours. Nothing after payment withdraws — a policy is never deleted.</div></div><div class="rt">'+chip('Customer Success','neutral',false,true)+'</div></div>'+
-    '<div><div class="bd"><b>Manual review queue</b><div class="m">An insurer reply the bot tied to this ticket but would not attach on its own — a policy-number mismatch, say — waits there to be attached by hand.</div></div><div class="rt">'+chip('Desk','neutral',false,true)+'</div></div></div>';
+    '</div>';
 }
 
 /* ---------- the ISS ticket screen (Tickets → ticket flow) ---------- */
@@ -293,7 +293,7 @@ function issTicketScreen(t){
     '</div><div class="pane"><div class="pb">'+
       '<div class="phhd"><div class="t">Flow</div><div class="a">one ISS ticket per product line</div></div>'+
       '<ul class="tl mt12">'+steps.map(function(s,k){ var done=k<=cur, now=k===cur+1&&i.stage!=='closed'&&i.stage!=='withdrawn'; return '<li><span class="dot'+(done?'':(now?' them':' sys'))+'"'+(!done&&!now?' style="opacity:.35"':'')+'></span><div class="bd"><b'+(!done&&!now?' style="color:var(--ink3);font-weight:500"':'')+'>'+esc(s[1])+'</b>'+(now?' '+chip('Now','amber',true,true):'')+(done&&s[2]>1?'<div class="m">'+esc(fmt(s[2]))+'</div>':'')+'</div></li>'; }).join('')+'</ul>'+
-      diamonds(true)+'<div class="h3">Requirements</div><div class="mt8">'+postRowsTable(l,can)+'</div>'+
+      issQueriesBlock(l,can)+issCarryBlock(l)+diamonds(true)+'<div class="h3">Requirements</div><div class="mt8">'+postRowsTable(l,can)+'</div>'+
       diamonds(true)+'<div class="h3">Document vault</div><div class="meta">Only documents actually held on the ticket — each one to view or download.</div>'+
       '<div class="rowlist doclist mt8">'+[i.rows.rhl.st==='sent'?'Risk-held letter':'',i.rows.pf.st==='done'?'Filled proposal form':'',i.rows.md.st==='done'?'Mandate letter':'',i.rows.pol.copy?'Policy copy':'',i.rows.pol.inv?'Tax invoice':'','PAN card','GST certificate','Payment proof'].filter(Boolean).map(function(d){ return docRow(d,true,'',{line:l.id,acct:a.id,ref:d==='Mandate letter'?i.rows.md.ref:''}); }).join('')+'</div>'+
       diamonds(true)+mailTrail(l)+
@@ -302,7 +302,7 @@ function issTicketScreen(t){
 }
 
 /* ---------- RM Home ---------- */
-function rmAccounts(uid){ return S.data.accounts.filter(function(a){return a.own===uid;}); }
+function rmAccounts(uid){ return S.data.accounts.filter(function(a){return a.own===uid||abCoA(a,uid);}); }
 function nextFollowUp(l){ var ts=tasksOfLine(l.id).filter(function(t){return !t.done&&(t.rule==='TR-09'||t.cls==='Manual'||t.cls==='Follow-up');}).sort(function(x,y){return x.dueAt-y.dueAt;}); return ts[0]?ts[0].dueAt:0; }
 /* [stated 24 Sep] contractual policies are out of every renewal view — they never renew */
 function renewalsFor(accts,days){ var out=[]; accts.forEach(function(a){ a.pols.forEach(function(p){ if(p.issuing||p.expired||isContractual(p.p)) return; var d=daysBetween(S.now,p.exp); if(d>=0&&d<=days) out.push({a:a,p:p,d:d,pr:d<=30?'P1':(d<=60?'P2':(d<=90?'P3':'P4'))}); }); }); return out.sort(function(x,y){return x.d-y.d;}); }
@@ -318,7 +318,7 @@ function rmHome(uid){
 }
 function renewalLineFor(a,p){ return linesOfAcct(a.id).filter(function(l){ return l.renews===p.id&&!dead(l)&&l.stage<15; })[0]||null; }
 function rmBuckets(uid){
-  var mine=S.data.lines.filter(function(l){return l.owner===uid;}), accts=rmAccounts(uid), b={fresh:[],ren:[],late:[],move:[],quiet:[]}, used={};
+  var mine=S.data.lines.filter(function(l){return abOwnsOrCo(l,uid);}), accts=rmAccounts(uid), b={fresh:[],ren:[],late:[],move:[],quiet:[]}, used={};
   var order={esc:0,over:1,today:2};
   /* 1 · newly assigned: handed over at payment with no welcome call yet, or a sales line nobody has called */
   mine.forEach(function(l){ if(dead(l)) return;
@@ -375,7 +375,7 @@ SCREENS.rmhome=function(){
     (1?hCard('move','amber','zap','Action required', b.move.map(function(x){
         if(x.t){ var t=x.t, a=acctOf(t.acct); return '<div class="hrow row" data-go="svctix" data-id="'+t.id+'"><div class="bd"><div class="tt">'+esc(t.id)+' <span class="pr">· '+esc(t.sub)+'</span></div><div class="mt">'+chip('Needs your reply','amber',true,true)+'<span>'+esc(a?shortName(a.n):'')+' · '+esc(t.prod)+'</span></div></div><div class="rt">'+ic('chevright')+'</div></div>'; }
         return hLineRow(x.l,'<span>'+esc(nextAction(x.l).txt)+'</span>'); }), chip(b.move.length,'amber',false,true)):'')+
-    (1?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
+    (0?hCard('quiet','blue','clock','No activity in '+QUIET_DAYS+' days', b.quiet.map(function(l){ return hLineRow(l,'<span class="red">'+daysQuiet(l)+' days</span><span>since the last activity · waiting on '+esc(actingParty(l))+'</span>'); }), chip(b.quiet.length,'blue',false,true)):'')+
     '</div>';
   return {sc:'Home', html:html};
 };

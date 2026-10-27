@@ -115,7 +115,7 @@ HANDLERS.push(function(t){
 document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&S.ui&&S.ui.qvLine){ qvClose(); } });
 
 /* a compact card that stands for the report wherever it is listed */
-function qcrCard(l,v,opts){ opts=opts||{}; var q=qcrQuotes(l,opts.rej), ps=q.map(function(x){return x.p;}).filter(Boolean), lo=Math.min.apply(null,ps), hi=Math.max.apply(null,ps), st=qcrVersions(l).filter(function(x){return x.v===v;})[0];
+function qcrCard0(l,v,opts){ opts=opts||{}; var q=qcrQuotes(l,opts.rej), ps=q.map(function(x){return x.p;}).filter(Boolean), lo=Math.min.apply(null,ps), hi=Math.max.apply(null,ps), st=qcrVersions(l).filter(function(x){return x.v===v;})[0];
   return '<div class="qcard"><div class="qc-ic">'+ic('file','ic20')+'</div><div class="qc-bd"><b>Quote Comparison Report · v'+v+'</b>'+(opts.rej?' '+chip('Rejected by the client','red',true,true):(st?' '+chip(st.st,st.tone,true,true):''))+
     '<div class="qc-m">'+plural(q.length,'insurer')+' compared'+(ps.length?' · '+(lo===hi?INR(lo):INR(lo)+' – '+INR(hi)):'')+(st&&st.at?' · '+esc(fmtD(st.at)):'')+'</div></div>'+
     '<div class="qc-a"><button class="btn sm'+(opts.primary?' primary':'')+'" data-qcrview="'+v+'" data-line="'+l.id+'"'+(opts.rej?' data-rej="1"':'')+'>'+esc(opts.label||'View')+'</button></div></div>'; }

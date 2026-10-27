@@ -10,7 +10,7 @@ function svcById(id){ return by(S.data.svc,id); }
 function polOf(t){ var a=acctOf(t.acct); return a?a.pols.filter(function(p){return p.id===t.pol;})[0]:null; }
 /* [stated 24 Sep · TBD-52] whoever owns the account works its service tickets, whatever their role */
 function svcCanAct(t){ var a=acctOf(t.acct); return !!a && a.own===S.user && !svcClosed(t); }
-function svcMine(t,u){ var a=acctOf(t.acct); if(!a) return false; if(u.role==='rm') return a.own===u.id; if(u.role==='rmhead') return rmTeam(u.id).some(function(x){return x.id===a.own;}); return true; }
+function svcMine(t,u){ var a=acctOf(t.acct); if(!a) return false; if(u.role==='rm'||u.role==='abm'||u.role==='abmmgr') return a.own===u.id||abCoA(a,u); if(u.role==='rmhead') return rmTeam(u.id).some(function(x){return x.id===a.own;}); return true; }
 
 SCREENS.svc=function(){ return SCREENS.tickets(); };
 
@@ -59,7 +59,7 @@ HANDLERS.push(function(t){
     var docs=(S.ui.sn_docs||'').split('|').filter(Boolean), missing=snDocs().filter(function(d){return docs.indexOf(d[0])<0;}).map(function(d){return {d:d[0],age:'0 days',got:0,opt:1};});
     if(k==='end'){ var ty=ENDO[S.ui.sn_type]; tk={id:'END-'+String(S.data.seq.svc++).padStart(4,'0'),k:'end',stageAt:S.now,acct:a.id,pol:p.id,prod:p.p,ins:p.ins,sub:S.ui.sn_type,cat:ty.cat,raised:S.now,chan:'RM Interface',sm:'',phase:0,stage:'Submitted',wait:'Desk',need:0,out:[],fields:ty.f.map(function(f,i){return [f[0],S.ui['sn_f'+i]||'—'];}),docs:docs,thread:[{d:'sys',w:'System',r:'',at:S.now,b:'Submitted by '+uname(S.user)+'. Awaiting verification by the desk.'}]};  }
     else { tk={id:'CLM-'+String(S.data.seq.clm++).padStart(4,'0'),k:'clm',stageAt:S.now,acct:a.id,pol:p.id,prod:p.p,ins:p.ins,sub:S.ui.sn_cause,raised:S.now,chan:S.ui.sn_chan||'RM Interface',sm:'',stage:'Intimated',client:'Intimated',wait:'Desk',need:0,contest:0,srv:null,dol:S.ui.sn_dol,est:S.ui.sn_est,desc:S.ui.sn_desc,out:[],docs:docs,thread:[{d:'sys',w:'System',r:'',at:S.now,b:'Claim intimated by '+uname(S.user)+' · loss on '+fmtD(new Date(S.ui.sn_dol+'T12:00:00').getTime())+' · estimate '+S.ui.sn_est}]}; }
-    S.data.svc.unshift(tk); acctLog(a,(k==='end'?'Endorsement ':'Claim ')+tk.id+' raised · '+tk.sub,uname(S.user)+' · on '+(p.pno||p.bkno||p.id));
+    S.data.svc.unshift(tk); acctLog(a,(k==='end'?'Endorsement ':'Claim ')+tk.id+' raised · '+tk.sub,uname(S.user)+' · on '+(p.pno||p.bkno||polNoDisp(p)));
   },'the ticket');
   if(!ok) return true;
   Object.keys(S.ui).forEach(function(k2){ if(k2.indexOf('sn_')===0) delete S.ui[k2]; });

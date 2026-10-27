@@ -1,8 +1,8 @@
 # BimaSetu CRM — working prototype (v47)
 
-> **The repository is now at v73.** What changed since v47 is in
-> [`changelog-v48-v64.md`](changelog-v48-v64.md) and [`changelog-v64-v73.md`](changelog-v64-v73.md).
-> This file is the record up to v47.
+> **The repository is now at v75 (with the 27 Oct additions).** What changed since v47 is in
+> [`changelog-v48-v64.md`](changelog-v48-v64.md), [`changelog-v64-v73.md`](changelog-v64-v73.md) and
+> [`changelog-v73-v75.md`](changelog-v73-v75.md). This file is the record up to v47.
 
 **Artifact:** https://claude.ai/artifact/V4ADJNCJwuYxDHs5pUcAAz
 **Design language:** BimaOps / BimaPlacement kit (tokens, Outfit, 248 px sidebar, white panel on grey shell, diamonds divider, one primary CTA per screen — and it is the screen's own, not a global button; amber-dashed = simulated inbound event, dotted-grey = prototype time control).

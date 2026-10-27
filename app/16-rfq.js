@@ -85,7 +85,7 @@ function cyberRfqDefs(l,a){
     {k:'cyL1', l:'In the last 5 years', req:0, t:'multi', o:['Incidents or claims from unauthorised access','Claims for defamation / privacy / malware / denial of service','Aware of any fact or circumstance that may give rise to a claim'], s:''}]};
   return [insured,partA,turnover,dataSec,frames,secSec,loss,asset1,asset2];
 }
-function rfqDefs(l,a){
+function rfqDefs0(l,a){
   var r=l.req||{}; a=a||{};
   if(l.product===CYBER_PRODUCT) return cyberRfqDefs(l,a);
   var common=[
@@ -135,9 +135,9 @@ function rfqFlat(l,a){ var out=[]; rfqDefs(l,a||acctOf(l)).forEach(function(s){ 
 function rfqVal(l,k){ var x=l.rfq&&l.rfq.f&&l.rfq.f[k]; return x&&x.v?x.v:''; }
 function rfqCount(l){ var fs=rfqFlat(l), c={total:fs.length,filled:0,req:0,missing:0,list:[]}; fs.forEach(function(f){ var v=rfqVal(l,f.k); if(v) c.filled++; if(f.req){ c.req++; if(!v){ c.missing++; c.list.push(f.l); } } }); return c; }
 /* [stated 26 Sep · 7.1 §3] a fresh-business RFQ opens empty — nothing from the account or the requirement */
-function rfqOpen(l,a,at){ l.rfq={st:'draft',f:{},openedAt:at||S.now,sharedAt:0,verifiedAt:0,floatedAt:0,direct:0}; }
+function rfqOpen0(l,a,at){ l.rfq={st:'draft',f:{},openedAt:at||S.now,sharedAt:0,verifiedAt:0,floatedAt:0,direct:0}; }
 function rfqFillRest(l,by,who,at,a,onlySome){ var n=0; rfqFlat(l,a).forEach(function(f,i){ var sv=f.s||f.pre; if(rfqVal(l,f.k)||!sv) return; if(onlySome&&i%onlySome) return; l.rfq.f[f.k]={v:sv,by:by,who:who||'',at:at||S.now}; n++; }); return n; }
-function rfqWho(l,x){ if(!x) return ''; if(x.by==='acct') return 'From the account'; if(x.by==='req') return 'From the requirement'; if(x.by==='excel') return 'From Excel · '+uname(x.who); if(x.by==='carry') return 'Carried over from '+x.who; if(x.by==='client') return (l.contact&&l.contact.n?l.contact.n:'Client')+' · client'; return uname(x.who); }
+function rfqWho0(l,x){ if(!x) return ''; if(x.by==='acct') return 'From the account'; if(x.by==='req') return 'From the requirement'; if(x.by==='excel') return 'From Excel · '+uname(x.who); if(x.by==='carry') return 'Carried over from '+x.who; if(x.by==='client') return (l.contact&&l.contact.n?l.contact.n:'Client')+' · client'; return uname(x.who); }
 function rfqTone(x){ return !x?'':(x.by==='client'?'client':(x.by==='owner'||x.by==='excel'?'owner':'pre')); }
 function rfqStTx(l){ var s=l.rfq&&l.rfq.st; return s==='draft'?['Draft — with '+uname(l.owner).split(' ')[0],'neutral']:(s==='shared'?['Shared for client review','blue']:(s==='verified'?['Approved by the client','green']:(s==='floated'?[(l.rfq.direct?'Floated directly':'Floated after client review'),'violet']:['No RFQ','neutral']))); }
 function rfqEditable(l,client){ if(!l.rfq||l.rate!==0||dead(l)) return false; if(client) return l.rfq.st==='shared'; return canAct(l)&&(l.rfq.st==='draft'||l.rfq.st==='shared'||l.rfq.st==='verified'); }
@@ -211,7 +211,7 @@ function softPatch(el,html){
   Array.prototype.forEach.call(os,function(s,i){ if(s.innerHTML!==ns[i].innerHTML) s.innerHTML=ns[i].innerHTML; });
   var ot=el.firstElementChild, nt=tmp.firstElementChild; if(ot&&nt&&ot.className!==nt.className) ot.className=nt.className;
 }
-function rfqPatch(l){
+function rfqPatch0(l){
   var f=document.getElementById('rfoot_'+l.id); if(f) softPatch(f,rfqFoot(l));
   var n=document.getElementById('nacard'); if(n) softPatch(n,naCard(l));
   cpPatch(l);

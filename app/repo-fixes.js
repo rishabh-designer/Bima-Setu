@@ -5,15 +5,14 @@
  *  delete it here if so.
  * ==================================================================== */
 
-/* Admin opens any account or opportunity [v65: Admin sees everything and acts
-   directly]. The lists widen through scopeIds(), but canSeeAcct() and
-   canSeeLine() have no Admin case, so every record opened from those lists
-   said "You don't have access". Present in v73. Wrapping keeps the artifact's
-   own checks for every other role. */
+/* Admin opens renewal opportunities [v65: Admin sees everything and acts
+   directly]. Admin's Renewals list is company-wide, but canSeeLine() refuses a
+   renewal to anyone who is not an RM, so opening one said "You don't have
+   access". (v73 also refused Admin every account; the prototype fixed that in
+   v75 by giving canSeeAcct() an Admin case.) Present in v75. Wrapping keeps
+   the artifact's own check for every other role. */
 (function(){
-  var seeAcct = canSeeAcct, seeLine = canSeeLine;
-  function isAdmin(u){ u = u || me(); return !!u && u.role === 'admin'; }
-  canSeeAcct = function(a, u){ return (isAdmin(u) && !!a && !a.merged) || seeAcct(a, u); };
-  canSeeLine = function(l, u){ return (isAdmin(u) && !!l) || seeLine(l, u); };
-  paint();   // boot has already painted; repaint in case it restored an Admin on a record
+  var seeLine = canSeeLine;
+  canSeeLine = function(l, u){ var who = u || me(); return (!!who && who.role === 'admin' && !!l) || seeLine(l, u); };
+  paint();   // boot has already painted; repaint in case it restored an Admin on a renewal
 })();

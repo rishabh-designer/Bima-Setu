@@ -13,10 +13,10 @@ function acctOpenLines(a){ return linesOfAcct(a.id).filter(openLine); }
    A user sees an account they own, one they own a line on, one where they are Sold by on a policy
    (permanently), or one where someone in their team qualifies. Merged-away accounts are never shown. */
 function soldHere(a,uid){ return linesOfAcct(a.id).some(function(l){ return l.soldBy===uid; }) || (a.pols||[]).some(function(p){ var l=p.line?lineById(p.line):null; return l&&l.soldBy===uid; }); }
-function whyMine(a,uid){ if(!a||a.merged) return ''; if(a.own===uid) return 'own'; if(linesOfAcct(a.id).some(function(l){return l.owner===uid&&(!isRen(l)||isRmRole(userById(uid)));})) return 'line'; if(soldHere(a,uid)) return 'sold'; return ''; }
+function whyMine(a,uid){ if(!a||a.merged) return ''; if(a.own===uid) return 'own'; if(abCoA(a,uid)) return 'abm'; if(linesOfAcct(a.id).some(function(l){return l.owner===uid&&(!isRen(l)||isRmRole(userById(uid)));})) return 'line'; if(soldHere(a,uid)) return 'sold'; return ''; }
 function isRmRole(u){ return !!u&&(u.role==='rm'||u.role==='rmhead'); }
 function teamIds(u){ if(!u) return []; if(u.role==='mgr') return teamOf(u.id).map(function(x){return x.id;}); if(u.role==='rmhead') return rmTeam(u.id).map(function(x){return x.id;}); return []; }
-function canSeeAcct(a,u){ u=u||me(); if(!a||!u||a.merged) return false; if(whyMine(a,u.id)) return true; return teamIds(u).some(function(id){ return !!whyMine(a,id); }); }
+function canSeeAcct(a,u){ u=u||me(); if(!a||!u||a.merged) return false; if(u.role==='admin'||whyMine(a,u.id)) return true; return teamIds(u).some(function(id){ return !!whyMine(a,id); }); }
 function canSeeLine(l,u){ u=u||me(); if(!l||!u) return false; if(isRen(l)&&!isRmRole(u)) return false; return canSeeAcct(acctOf(l),u); }
 /* someone on the account — the people who may act on it (Get verified, contacts) */
 function onAcct(a,u){ u=u||me(); return !!u&&!!a&&(a.own===u.id||linesOfAcct(a.id).some(function(l){return l.owner===u.id;})); }
@@ -27,7 +27,7 @@ function svcOfAcct(aid){ return S.data.svc.filter(function(t){return t.acct===ai
 /* [stated 27 Sep · 9.8] a policy written at payment reads Awaiting policy copy until the copy passes QC */
 function polState(p){ if(p.expired||p.exp<S.now) return {tx:'Expired',tone:'red'}; if(p.issuing) return {tx:'Awaiting policy copy',tone:'violet'}; var d=daysBetween(S.now,p.exp); if(d<=30) return {tx:'Expires in '+d+' d',tone:'red'}; if(d<=90) return {tx:'Expires in '+d+' d',tone:'amber'}; return {tx:'In force',tone:'green'}; }
 function premInForce(a){ return a.pols.filter(function(p){return !(p.expired||p.exp<S.now)&&!p.issuing;}).reduce(function(s,p){return s+(+p.pr||0);},0); }
-var WHY_TX={own:'you own it',line:'you own a line here',sold:'sold here',team:'your team is on it'};
+var WHY_TX={abm:'you are its ABM',own:'you own it',line:'you own a line here',sold:'sold here',team:'your team is on it'};
 function acctLive(a,u){ var ls=linesOfAcct(a.id).filter(function(l){ return !isRen(l)||isRmRole(u); });
   var opp=oppsOfAcct(a.id).some(function(o){ return oppStatus(o).tx==='Open'; }), tk=svcOfAcct(a.id).some(function(t){return !svcClosed(t);})||ls.some(function(l){ return ticketsOf(l).some(function(t){ return t.st!=='Closed'; }); });
   var ren=(a.pols||[]).some(function(p){ var d=calDays(S.now,p.exp); return !p.issuing&&!p.expired&&!isContractual(p.p)&&d>=0&&d<=REN_WINDOW; });
@@ -98,13 +98,13 @@ SCREENS.accounts=function(){
   var rows=r.rows.map(function(x){ var a=x.a, pif=a.pols.filter(function(p){return !(p.expired||p.exp<S.now)&&!p.issuing;}).length;
     return '<tr class="row" data-go="acct" data-id="'+a.id+'"><td class="nm one" title="'+esc(a.n)+'">'+esc(a.n)+'<div class="sub">'+(x.why?'<span class="amber">'+esc(x.why)+'</span>':esc(a.id)+' · '+esc(a.city||'—'))+'</div></td>'+
       '<td>'+(a.prov?chip('Provisional','amber',true,true):chip('Verified','green',true,true))+'</td>'+
-      '<td class="one">'+esc(uname(a.own))+'<div class="sub">'+esc(WHY_TX[x.w])+'</div></td>'+
+      '<td class="one">'+esc(uname(a.own))+'<div class="sub">'+esc(abOwnRole(a)+(WHY_TX[x.w]?' · '+WHY_TX[x.w]:''))+'</div></td>'+abAbmCell(a)+
       '<td class="num">'+(pif?'<b class="b">'+pif+'</b>':'<span class="meta">—</span>')+'</td>'+
       '<td class="num">'+(premInForce(a)?'<b class="b">'+INR(premInForce(a))+'</b>':'<span class="meta">—</span>')+'</td>'+
       '<td style="white-space:nowrap">'+(a.createdAt?esc(fmtD(a.createdAt)):'<span class="meta">—</span>')+'<div class="sub">'+esc(acctCameIn(a))+'</div></td></tr>'; }).join('');
   var html='<div class="hdrow"><div><div class="h1">Accounts</div><div class="sub">'+(teamView(u)?'Your team’s accounts.':'Accounts you own, own a line on, or sold on.')+'</div></div></div>'+diamonds()+
     filters+
-    '<div class="card mt16" style="overflow:hidden">'+(r.rows.length?'<div class="tw"><table class="t"><thead><tr><th>Account</th><th>Identity</th><th>Owner</th><th class="num">Policies in force</th><th class="num">Premium in force</th><th>Created on</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    '<div class="card mt16" style="overflow:hidden">'+(r.rows.length?'<div class="tw"><table class="t"><thead><tr><th>Account</th><th>Identity</th><th>RM · owner</th><th>ABM</th><th class="num">Policies in force</th><th class="num">Premium in force</th><th>Created on</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       :empty('building',nf||S.ui.aq?'Nothing matches these filters':'No accounts yet',nf||S.ui.aq?'Clear the search or a filter.':'An account appears here when you own it, own a line on it, or sold a policy on it.',nf||S.ui.aq?'<button class="btn" data-clearaf="1">Clear filters</button>':''))+'</div>'+
     '<div class="meta mt8">Showing '+r.rows.length+' of '+r.total+'</div>';
   return {sc:'Accounts', ctx:plural(r.total,'account'), html:html};
@@ -182,7 +182,7 @@ SCREENS.acct=function(){
   var why=whyMine(a,u.id), owner=a.own===u.id, body='';
   /* [stated 23 Sep] one row per policy: number, BK number, product, insurer, premium, SI, start, end, status, type */
   var polRow=function(p){ var st=polLive(p), ty=polType(p);
-    return '<tr'+(polActive(p)?'':' class="dim"')+'><td class="id"><button class="link mono" data-go="policy" data-id="'+p.id+'">'+esc(p.pno||'awaited')+'</button></td><td class="mono">'+(p.bkno?esc(p.bkno):'<span class="meta">—</span>')+'</td><td class="nm">'+esc(p.p)+'</td><td>'+esc(p.ins)+'</td><td class="num">'+INR(p.pr)+'</td><td>'+esc(p.si||'—')+'</td><td style="white-space:nowrap">'+(p.issuing?'<span class="meta">to be confirmed</span>':esc(p.start?fmtD(p.start):'—'))+'</td><td style="white-space:nowrap">'+(p.issuing?'<span class="meta">—</span>':esc(p.exp?fmtD(p.exp):'—'))+'</td><td>'+chip(st.tx,st.tone,true,true)+(p.issuing?'<div class="sub">Awaiting policy copy</div>':'')+'</td><td>'+chip(ty,PTYPE[ty]||'neutral',false,true)+'</td>'+
+    return '<tr'+(polActive(p)?'':' class="dim"')+'><td class="id"><button class="link mono" data-go="policy" data-id="'+p.id+'">'+esc(polNoDisp(p))+'</button></td><td class="mono">'+(p.bkno?esc(p.bkno):'<span class="meta">—</span>')+'</td><td class="nm">'+esc(p.p)+'</td><td>'+esc(p.ins)+'</td><td class="num">'+INR(p.pr)+'</td><td>'+esc(p.si||'—')+'</td><td style="white-space:nowrap">'+(p.issuing?'<span class="meta">to be confirmed</span>':esc(p.start?fmtD(p.start):'—'))+'</td><td style="white-space:nowrap">'+(p.issuing?'<span class="meta">—</span>':esc(p.exp?fmtD(p.exp):'—'))+'</td><td>'+chip(st.tx,st.tone,true,true)+(p.issuing?'<div class="sub">Awaiting policy copy</div>':'')+'</td><td>'+chip(ty,PTYPE[ty]||'neutral',false,true)+'</td>'+
     (owner?'<td class="right" style="white-space:nowrap">'+(polActive(p)&&!p.issuing?'<button class="btn sm" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="end">Endorse</button> ':'')+(!p.issuing?'<button class="btn sm ghost" data-go="svcnew" data-pol="'+p.id+'" data-acct="'+a.id+'" data-kind="clm">Claim</button>':'')+'</td>':'')+'</tr>'; };
   if(tab==='overview'){
     body='<div class="stat"><div class="s"><div class="lbl">Open lines</div><div class="v">'+ol.length+'</div></div><div class="s"><div class="lbl">Opportunities</div><div class="v">'+opps.length+'</div></div><div class="s"><div class="lbl">Policies in force</div><div class="v">'+live.filter(function(p){return !p.issuing;}).length+'</div></div><div class="s"><div class="lbl">Premium in force</div><div class="v">'+(premInForce(a)?INR(premInForce(a)):'—')+'</div></div><div class="s"><div class="lbl">Service tickets</div><div class="v">'+svc.filter(function(t){return !svcClosed(t);}).length+'</div></div></div>'+
@@ -239,7 +239,7 @@ SCREENS.acct=function(){
         kv('Trade / brand name',(a.trade?esc(a.trade):'<span class="meta">none on file</span>')+(owner?' <button class="quiet" data-flow="tradeName" data-acct="'+a.id+'">'+(a.trade?'Edit':'Add')+'</button>':''))+
         kv('Relationship type',(a.rel?esc(a.rel):'<span class="meta">not labelled</span>')+(owner?' <button class="quiet" data-flow="relType" data-acct="'+a.id+'">'+(a.rel?'Change':'Label it')+'</button>':'')+'<div class="meta">display only — it changes no key, group or match</div>')+
         kv('PAN',idShow(a,u,a.pan))+kv(a.sole||a.aad?'Aadhaar (proprietor)':'GSTIN',idShow(a,u,a.sole||a.aad?a.aad:a.gst))+kv('KYC',a.prov?chip('Provisional','amber',true,true)+' <span class="meta">needed before a payment request</span>':chip('Verified','green',true,true)+'<div class="meta">'+esc(kycLine(a))+'</div>')+
-        kv('Registered office',esc(a.city||'—')+(a.st?', '+esc(a.st):''))+kv('Industry',esc(a.ind||'—'))+kv('Employees',esc(a.emp||'—'))+kv('Turnover',esc(a.to||'—')+(a.fin?src('Probe42',a.fin.read):''))+kv('Account owner',esc(uname(a.own)))+'</div>'+
+        kv('Registered office',esc(a.city||'—')+(a.st?', '+esc(a.st):''))+acctAddrKvs(a,u)+kv('Industry',esc(a.ind||'—'))+kv('Employees',esc(a.emp||'—'))+kv('Turnover',esc(a.to||'—')+(a.fin?src('Probe42',a.fin.read):''))+kv('Account owner',esc(uname(a.own)))+'</div>'+
       (a.prof?diamonds(true)+'<div class="h3">Risk</div><div class="kvgrid mt12">'+kv('Risk class',esc(a.prof.risk)+src('Bimanetra','computed '+(a.fin?a.fin.read:'')))+kv('Classification',esc(a.prof.cls)+src('Bimanetra','computed '+(a.fin?a.fin.read:'')))+kv('Exposure',esc(a.prof.exp)+src('Bimanetra','computed '+(a.fin?a.fin.read:'')))+'</div>':'')+
       (a.fin?diamonds(true)+'<div class="h3">Financials · '+esc(a.fin.yr)+'</div><div class="kvgrid mt12">'+kv('Revenue',esc(a.fin.rev)+src('Probe42',a.fin.read))+kv('Profit after tax',esc(a.fin.pat)+src('Probe42',a.fin.read))+kv('Net worth',esc(a.fin.net)+src('Probe42',a.fin.read))+kv('CIN','<span class="mono">'+esc(a.fin.cin)+'</span>'+src('Probe42',a.fin.read))+'</div>':''); });
   } else if(tab==='group'){
@@ -260,8 +260,8 @@ SCREENS.acct=function(){
     '<div class="crumbs"><button data-go="accounts">Accounts</button>'+ic('chevright','ic14')+'<b>'+esc(a.n)+'</b></div>'+
     '<div class="hdrow"><div style="min-width:0"><div class="h1">'+esc(a.n)+'</div>'+
       '<div class="metaline"><span>'+esc(a.id)+'</span><span class="sep">·</span>'+(a.prov?chip('Provisional','amber',true,true):'<span title="'+esc(kycLine(a))+'">'+chip('Verified','green',true,true)+'</span>')+(a.rel?chip(a.rel,'neutral',false,true):'')+keys+'</div>'+
-      '<div class="metaline one"><span>'+esc(a.city||'—')+'</span><span class="sep">·</span><span>Owner <b class="b">'+esc(uname(a.own))+'</b></span>'+(sharePan.length?'<span class="sep">·</span><span title="Same PAN, '+plural(sharePan.length+1,'account')+'">Group of '+(sharePan.length+1)+'</span>':'')+'</div></div><span class="sp"></span>'+
-      '<div class="acts">'+(isMgrRole(u)&&inMyTeam(a.own,u)?'<button class="btn sm" data-flow="acctReassign" data-acct="'+a.id+'">Reassign</button>':'')+(a.prov&&onAcct(a,u)?'<button class="btn sm primary" data-flow="kyc" data-acct="'+a.id+'" data-line="">'+ic('shield')+'Get verified</button>':'')+'<button class="btn sm" data-flow="newOpp" data-acct="'+a.id+'">'+ic('plus')+'New opportunity</button></div></div>'+
+      '<div class="metaline one"><span>'+esc(a.city||'—')+'</span>'+(sharePan.length?'<span class="sep">·</span><span title="Same PAN, '+plural(sharePan.length+1,'account')+'">Group of '+(sharePan.length+1)+'</span>':'')+'</div></div><span class="sp"></span>'+
+      '<div class="acts">'+(isMgrRole(u)&&inMyTeam(a.own,u)?'<button class="btn sm" data-flow="acctReassign" data-acct="'+a.id+'">Reassign</button>':'')+(a.prov&&onAcct(a,u)?'<button class="btn sm primary" data-flow="kyc" data-acct="'+a.id+'" data-line="">'+ic('shield')+'Get verified</button>':'')+'<button class="btn sm" data-flow="newOpp" data-acct="'+a.id+'">'+ic('plus')+'New opportunity</button></div></div>'+abTeam(a)+
     (a.prov?'<div class="banner amber mt12">'+ic('alert','ic14')+'<span><b>Provisional</b> — '+(a.pan||a.gst?'PAN and GST documents not uploaded.':'no PAN or GST yet.')+' Needed before payment.</span><span class="sp"></span>'+(onAcct(a,u)?'<button class="btn sm" data-flow="kyc" data-acct="'+a.id+'" data-line="">Get verified</button>':'')+'</div>'
       :'')+
     (sole?'<div class="banner neutral mt12">'+ic('info','ic14')+'<span><b>Sole proprietor</b> — PAN + Aadhaar, no GST.</span></div>':'')+

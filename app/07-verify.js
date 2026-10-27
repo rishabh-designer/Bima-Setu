@@ -77,14 +77,14 @@ FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read
     var nm=(S.sel.ocrname||'').trim(), was=a.n, dup=r==='gst'?S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.gst&&x.gst.toUpperCase()===gst;})[0]:
       S.data.accounts.filter(function(x){return x.id!==a.id&&!x.merged&&x.pan===pan&&x.aad&&x.aad.replace(/\s/g,'').slice(-4)===aad.replace(/\s/g,'').slice(-4);})[0];
     var ok=write(function(){
-      if(dup){ mergeAccount(a,dup,r); if(!dup.prov) linesOfAcct(dup.id).forEach(function(x){ if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified on merge — payment can be requested'); }); return; }
+      if(dup){ mergeAccount(a,dup,r); if(!dup.prov) linesOfAcct(dup.id).forEach(function(x){ if(x.stage===9&&x.status==='open') moveStage(x,10,'KYC verified on merge — payment can be requested'); }); return; }
       a.pan=pan; if(gst) a.gst=gst; if(aad) a.aad=aad; a.prov=0; a.kycBy=S.user; a.kycAt=S.now; a.kycHow=r==='gst'?'PAN card and GST certificate uploaded · PAN matched the PAN inside the GSTIN':'PAN card and Aadhaar uploaded · proprietorship, no GST';
-      a.kycDocs={pan:S.sel.panname||'PAN card',doc:S.sel.docname||kycSecondName()};
+      a.kycDocs={pan:S.sel.panname||'PAN card',doc:S.sel.docname||kycSecondName()}; if(r==='gst'&&!a.gstAddr) a.gstAddr=((a.city||'')+(a.st?', '+a.st:''))+' · read from the GST certificate';
       if(nm&&nm!==a.n){ a.nWas=was; a.n=nm; acctLog(a,'Renamed on verification: '+was+' → '+nm,'System · read by OCR from the PAN card'); }
       acctLog(a,'KYC verified','System · '+a.kycHow+' · uploaded by '+uname(S.user));
       linesOfAcct(a.id).forEach(function(x){
         logAdd(x,'KYC verified','System · '+(r==='gst'?'PAN matched the PAN inside the GSTIN':'PAN and Aadhaar read — proprietorship, no GST')+' · uploaded by '+uname(S.user),'sys',1);
-        if(x.stage===9&&x.status==='open'&&!isChola(x)) moveStage(x,10,'KYC verified — payment can be requested');
+        if(x.stage===9&&x.status==='open') moveStage(x,10,'KYC verified — payment can be requested');
       });
     },'the verification');
     if(!ok) return 'fail';
@@ -144,13 +144,13 @@ function payAnchor(){ var ids=paySel(); if(!ids.length) return null; var l=lineB
 function payCompatible(l){ var a=payAnchor(); return !a||(l.acct===a.acct&&isRen(l)===a.ren); }
 function paySelTotal(){ return paySel().reduce(function(s,id){ var l=lineById(id); return s+(l?premOf(l):0); },0); }
 function payBtn(lines,u){ u=u||me(); if(S.ui.paymode) return ''; var able=hasMultiPay(lines,u);
-  return '<button class="btn sm'+(able?' primary':'')+'" data-paymode="1"'+(able?'':' disabled title="Enable needs 2+ opportunities on one account \u2014 yours, verified, at Purchase Requested, and not yet on a payment request"')+'>'+ic('wallet')+'Multiple payment</button>'; }
+  return '<button class="btn sm'+(able?' primary':'')+'" data-paymode="1"'+(able?'':' disabled title="Enable needs 2+ opportunities on one account \u2014 yours, verified, at Purchase Requested, the same type and the same insurer, and not yet on a payment request"')+'>'+ic('wallet')+'Multiple payment</button>'; }
 function payChk(l,u){ if(!S.ui.paymode) return '<span style="display:inline-block;width:20px"></span>'; u=u||me();
   if(!payElig(l,u)) return '<span style="display:inline-block;width:20px"></span>';
   var on=paySel().indexOf(l.id)>=0, able=on||payCompatible(l);
-  return '<button data-paysel="'+l.id+'"'+(able?'':' disabled')+' title="'+(able?'':'A different account is already selected')+'" style="width:20px;height:20px;padding:0;border-radius:5px;border:1.5px solid '+(on?'var(--violet,#4318D4)':'var(--border,#D6DAE4)')+';background:'+(on?'var(--violet,#4318D4)':'#fff')+';display:inline-flex;align-items:center;justify-content:center;cursor:'+(able?'pointer':'not-allowed')+';opacity:'+(able?'1':'.45')+'">'+(on?'<span style="color:#fff;line-height:1">'+ic('check','ic14')+'</span>':'')+'</button>'; }
+  return '<button data-paysel="'+l.id+'"'+(able?'':' disabled')+' title="'+(able?'':'A different account, type or insurer is already selected')+'" style="width:20px;height:20px;padding:0;border-radius:5px;border:1.5px solid '+(on?'var(--violet,#4318D4)':'var(--border,#D6DAE4)')+';background:'+(on?'var(--violet,#4318D4)':'#fff')+';display:inline-flex;align-items:center;justify-content:center;cursor:'+(able?'pointer':'not-allowed')+';opacity:'+(able?'1':'.45')+'">'+(on?'<span style="color:#fff;line-height:1">'+ic('check','ic14')+'</span>':'')+'</button>'; }
 function paySelBar(){ if(!S.ui.paymode) return ''; var ids=paySel(), tot=paySelTotal();
-  return '<div style="position:sticky;bottom:12px;z-index:5;margin-top:14px;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--violet,#4318D4);border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(67,24,212,.16)"><div style="flex:1">'+(ids.length?'<b>'+plural(ids.length,'opportunity').replace('opportunitys','opportunities')+' selected</b> \u00b7 '+INR(tot)+'<span class="meta"> \u00b7 same account \u00b7 same owner \u00b7 Purchase Requested</span>':'<b>Multiple payment</b><span class="meta"> \u00b7 tick the opportunities to pay together \u2014 the first one fixes the account</span>')+'</div><button class="btn sm ghost" data-paycancel="1">Cancel</button><button class="btn sm primary" data-payraise="1"'+(ids.length?'':' disabled')+'>'+ic('wallet')+'Raise payment request</button></div>'; }
+  return '<div style="position:sticky;bottom:12px;z-index:5;margin-top:14px;display:flex;align-items:center;gap:12px;background:var(--card,#fff);border:1px solid var(--violet,#4318D4);border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(67,24,212,.16)"><div style="flex:1">'+(ids.length?'<b>'+plural(ids.length,'opportunity').replace('opportunitys','opportunities')+' selected</b> \u00b7 '+INR(tot)+'<span class="meta"> \u00b7 same account \u00b7 same owner \u00b7 same type \u00b7 same insurer \u00b7 Purchase Requested</span>':'<b>Multiple payment</b><span class="meta"> \u00b7 tick the opportunities to pay together \u2014 the first one fixes the account, the type and the insurer</span>')+'</div><button class="btn sm ghost" data-paycancel="1">Cancel</button><button class="btn sm primary" data-payraise="1"'+(ids.length?'':' disabled')+'>'+ic('wallet')+'Raise payment request</button></div>'; }
 HANDLERS.push(function(t){
   if(t.closest('[data-paymode]')){ S.ui.paymode=true; S.ui.paysel=[]; paint(); return true; }
   if(t.closest('[data-paycancel]')){ S.ui.paymode=false; S.ui.paysel=[]; paint(); return true; }
