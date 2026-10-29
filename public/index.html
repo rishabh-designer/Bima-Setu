@@ -1057,6 +1057,7 @@ td.rmamiss{background:var(--redSoft,#FDECEC);color:var(--red)}td.rmamiss .link{c
 .pchip{border:1px solid var(--borderStrong,#D1C6FF);background:var(--card,#fff);border-radius:999px;padding:5px 12px;font-weight:600;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:baseline}
 .pchip span{font-weight:500;font-size:12px;color:var(--ink3)}.pchip:hover{border-color:var(--violet);color:var(--violet)}
 table.usrt th{white-space:nowrap}table.usrt td{white-space:normal}table.usrt td.nm{min-width:190px}
+.mailprev{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--cardAlt,#F7F7FB)}.mailprev .mh{font-size:13px;margin-bottom:4px}.mailprev pre{white-space:pre-wrap;font-family:inherit;font-size:13px;margin:10px 0 6px;line-height:1.5}
 
 /* ABM */
 .tiles.seven{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -2040,7 +2041,7 @@ function nextAction0(l){
       if(l.pay==='ticket') return {tone:'violet',lab:'With Ops',txt:'Payment ticket '+payRef(l)+' with ops',why:'Ops prepares the payment details. They come back here.',acts:[['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details sent by Ops, not yet sent to the client',why:'Desk stage: Payment details sent. Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
       return {tone:'amber',lab:'Next action',txt:'Ready for a payment request',why:'One request can cover several of your lines on the opportunity.',acts:[['pay','Raise payment request']]};
-    case 11: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
+    case 11: var d10=daysInStage(l), lm=(l.payMails||[]).slice(-1)[0]; return {tone:'blue',lab:'Waiting on the client',txt:'Payment details sent to the client'+(lm?' · '+fmt(lm.at):(d10?' '+plural(d10,'day')+' ago':''))+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. Emailed automatically when Ops closed the payment ticket'+((l.payMails||[]).length>1?' · resent '+plural(l.payMails.length-1,'time'):'')+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment'],['payResend','Resend payment details']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }
@@ -2804,14 +2805,14 @@ SCREENS.line=function(){
   var tks=ticketsOf(l), ltasks=tasksOfLine(l.id).filter(function(t){return !t.done;});
   var body='';
   if(tab==='overview'){
+    var ovReq=(l.stage>=1?reqSection(l,true):''), ovRc=reqCount(l), ovHas=ovRc.n>0||Object.keys(l.reqOnline||{}).length>0, ovPay=(l.stage>=9&&l.picked?soldBlock(l):'');
     body='<div class="phhd"><div class="t">Captured at creation</div><div class="a">Line age <b>'+plural(daysBetween(l.createdAt,S.now),'day')+'</b></div></div><div class="kvgrid mt12">'+
       (o?kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
          :kv('Business type','Renewal <span class="meta">· no opportunity — a renewal is a product line on the account</span>'))+(l.renews?renOverview(l):'')+
       kv('Source',esc(l.src||(o?o.src:'')||'—'))+kv('Created',esc(fmtD(l.createdAt)))+
       kv('Calls',plural(callsMade(l),'call')+(l.status==='open'&&(l.miss||0)?'<div class="meta">'+plural(l.miss,'missed call')+' since the last connect</div>':''))+
-      (l.inbound?kv('Done online',esc(({legs:plural(l.inbound.legs||0,'step')+' of 4 discovery steps',rated:'Discovery and the rater’s quotes',selected:'Discovery, quotes and a quote selection'})[l.inbound.step]||'Contact details only')):'')+'</div>'+(l.renews?renFlag(l):'')+
-      (l.stage>=9&&l.picked?diamonds(true)+soldBlock(l):'')+
-      (l.stage>=1?diamonds(true)+reqSection(l,true):'');
+      (l.inbound?kv('Done online',esc(({legs:plural(l.inbound.legs||0,'step')+' of 4 discovery steps',rated:'Discovery and the rater’s quotes',selected:'Discovery, quotes and a quote selection'})[l.inbound.step]||'Contact details only')):'')+'</div>'+(l.renews?renFlag(l):'');
+    body=[ovPay, ovHas?ovReq:'', body, ovHas?'':ovReq].filter(Boolean).join(diamonds(true));
   } else if(tab==='req'){
     body=reqSection(l,true); 
   } else if(tab==='post'){ body=postTab(l); }
@@ -2945,7 +2946,7 @@ function runSim(k,l){
     if(k==='plcQuery'){ l.plcQ=1; l.qAt=0; logAdd(l,'Placement raised a query','System · ticket PLC-'+l.id.slice(3)+' · '+PLC_QUERY,'sys',1); }
     if(k==='extNone'){ l.allDecl=1; logAdd(l,'Placement ticket responded — every insurer declined','System · ticket PLC-'+l.id.slice(3)+' · no quotes on round '+l.round,'sys',1); moveStage(l,7,'Placement ticket responded with no quotes'); }
     if(k==='extPlc'){ l.allDecl=0; l.qAt=S.now; logAdd(l,'Quotes returned by placement','System · ticket PLC-'+l.id.slice(3),'sys',1); moveStage(l,7,'Quotes received from placement'); }
-    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; x.payDesk=3; x.payDeskAt=S.now; logAdd(x,'Payment details sent by Ops','System · ticket '+payRef(x)+' · desk stage Payment details sent · '+payModeOf(x),'sys',1); }); }
+    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; x.payDesk=3; x.payDeskAt=S.now; logAdd(x,'Payment details sent by Ops','System · ticket '+payRef(x)+' · desk stage Payment details sent · '+payModeOf(x),'sys',1); }); payAutoSend(l); }
     if(k==='extPaid'){ logAdd(l,'Payment screenshot received from client','System · on email','pay',1); }
     if(k==='extTake'){ var u=userById(l.owner); var m=u&&u.mgr?u.mgr:'vikram'; if(S.data.took.indexOf(l.id)<0) S.data.took.push(l.id); l.prevOwner=l.owner; l.owner=m; logAdd(l,'Owner changed from '+uname(l.prevOwner)+' to '+uname(m)+' — client escalation','by '+uname(m)+' · Take ownership','sys',1); }
     if(k==='cholaPaid'){ if(cholaLinkExpired(l)) return; var a=acctOf(l), rm=rmFor(a,l.product);
@@ -2961,7 +2962,7 @@ function runSim(k,l){
     if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-instTTL(l)-1; logAdd(l,'Payment link expired','System · the '+validTx(l)+' '+shortIns(l.picked)+' link lapsed unpaid · regenerate to send a fresh link','sys',1); }
   },'the simulated event');
   if(!ok) return;
-  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops sent the payment details','Desk stage Payment details sent. The line stays at Purchase Requested — share them with the client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
+  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops closed the payment ticket','The payment details were emailed to the client automatically · now at Payment Details Shared with Client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
   paint(); toast(msg[0],msg[1]);
 }
 
@@ -6909,7 +6910,7 @@ function payTurnKv(l,c){
 function paySimBtns(l){ var b=[], d=l.payDesk||0;
   if(d<1) b.push(simbtn('Ops picks it up — Link generation','data-v74sim="payRoute" data-line="'+l.id+'"'));
   else if(d<2&&payModeOf(l)==='Payment link') b.push(simbtn('Ops asks the insurer for the link — Awaiting payment details','data-v74sim="payAwait" data-line="'+l.id+'"'));
-  b.push(simbtn('Ops sends the payment details','data-sim="extOps" data-line="'+l.id+'"'));
+  b.push(simbtn('Ops sends the details and closes the ticket','data-sim="extOps" data-line="'+l.id+'"'));
   return b; }
 
 /* [stated 23 Oct · new behaviour 1] the same insurer is the seventh condition on the multi-payment gate */
@@ -7172,10 +7173,7 @@ FLOWS.cholaShare={t:'Share the policy copy', sub:'The insurer issued it on payme
   ok:'Share policy copy',
   run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by '+shortIns(l.picked)+' · three rails · no post-purchase ticket','post',1); moveStage(l,15,'Policy copy shared with the client'); },'the share');
     if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client.'); }};
-function soldBlock(l){ var payTx;
-  if(isChola(l)){ var ins=shortIns(l.picked); payTx=(l.chola&&l.chola.paid)?'Paid on '+ins+'’s link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.link)?'Link generated':'Link not generated yet')); }
-  else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops · '+PAY_DESK[Math.min(2,l.payDesk||0)]:(l.pay==='back'?'Payment details sent':(l.pay==='cheque'?'Cheque — to collect':(l.pay==='shared'?'Shared with client':'Paid')))); }
-  return '<div class="phhd"><div class="t">Sold</div></div><div class="kvgrid mt12">'+kv('Insurer',esc(l.picked||l.ins||'—'))+kv('Confirmed premium','<b>'+INR(premOf(l))+'</b>')+kv('Payment',esc(payTx))+kv('Route',l.route==='INSTANT'?'Instant purchase':'Ops ticket')+kv('Insurer branch',esc(l.insBranch||'—'))+'</div>'; }
+function soldBlock(l){ return payDetailsSub(l); }
 
 /* ==================================================================== *
  *  4 · Call tasks + click-to-call (v1, instead of the Ozonetel auto-dialer)
@@ -7902,6 +7900,68 @@ rmFor=function(a,product){ var o=a?userById(a.own):null; if(o&&(o.role==='rm'||o
 /* the call outcome knows which task was called, so its follow-up keeps that task's role */
 (function(){ var F=FLOWS.call, r0=F.run; F.run=function(){ var l=FL(), t=l?ctOpenTask(l,S.sel.task):null; CT_OUT_TEAM=(t&&t.team)||'';
   try{ return r0.apply(this,arguments); } finally { CT_OUT_TEAM=''; } }; })();
+
+/* ==================================================================== *
+ *  [stated 29 Oct] Payment details go to the client automatically.
+ *  When Ops closes the payment ticket at "Payment details sent", BimaSetu
+ *  emails the details to the client contact on the request — email only,
+ *  no RM or Sales name in the body, no checks — and moves the opportunity
+ *  to Payment Details Shared with Client. While it is at that stage the
+ *  user can resend: each resend is a new email with the same details.
+ * ==================================================================== */
+function payMail(l){ var who=(l.contact&&l.contact.n)||'there', amt=INR(l.amt||premOf(l)), mode=payModeOf(l), ins=payInsurer(l), a=acctOf(l);
+  var how=mode==='Payment link'?'Pay securely using the payment link below. The link is from '+ins+'.':(mode==='NEFT / RTGS'||/NEFT/.test(mode)?'Pay by NEFT / RTGS to the account details below.':'The '+mode.toLowerCase()+' details are below.');
+  return {to:(l.contact&&l.contact.e)||'', subject:'Payment details · '+l.product+' policy with '+ins,
+    body:'Dear '+who+',\n\nPlease find the payment details for '+(a?shortName(a.n)+'’s ':'your ')+l.product+' policy with '+ins+'.\n\nAmount: '+amt+'\nPayment mode: '+mode+'\n\n'+how+'\n\nOnce the payment is done, please reply to this email with the payment confirmation.\n\nRegards,\nTeam BimaKavach'}; }
+function payEmailOut(x,resend){ var m=payMail(x); x.payMails=(x.payMails||[]).concat([{at:S.now,to:m.to,resend:resend?1:0,by:resend?S.user:'system'}]);
+  logAdd(x,resend?'Payment details re-sent to the client':'Payment details shared with client',(resend?uname(S.user)+' · resend':'System · sent automatically when Ops closed '+payRef(x))+' · email to '+(m.to||'the contact on the request')+' · '+payModeOf(x),'pay',resend?0:1); }
+function payAutoSend(l){ var made=[], ids=(l.payLines&&l.payLines.length?l.payLines:[l.id]);
+  ids.forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='back') return; x.pay='shared'; payEmailOut(x,false); if(x.stage<11) made=made.concat(moveStage(x,11,'Payment details emailed to the client')); });
+  return made; }
+FLOWS.payResend={t:'Resend payment details', sub:function(){ var l=FL(); return 'A new email with the same payment details goes to '+((l.contact&&l.contact.n)||'the client')+'.'; }, wide:true,
+  body:function(){ var l=FL(), m=payMail(l), sent=(l.payMails||[]);
+    return '<div class="mailprev"><div class="mh"><span class="meta">To</span> '+esc(m.to||'—')+'</div><div class="mh"><span class="meta">Subject</span> '+esc(m.subject)+'</div><pre>'+esc(m.body)+'</pre>'+(payModeOf(l)==='Payment link'?'<div class="meta">The insurer’s payment link is included.</div>':'<div class="meta">The details Ops returned are included.</div>')+'</div>'+
+      (sent.length?'<div class="meta mt12">Sent so far: '+sent.map(function(s){ return esc(fmt(s.at))+(s.resend?' (resend)':' (automatic)'); }).join(' · ')+'</div>':''); },
+  can:function(){ var l=FL(); return !!l&&l.stage===11&&!dead(l); }, ok:'Resend email',
+  run:function(){ var l=FL(); if(!l||l.stage!==11) return 'fail'; var ok=write(function(){ payEmailOut(l,true); },'the resend'); if(!ok) return 'fail'; toast('Payment details re-sent',(l.contact&&l.contact.e)||'the client'); }};
+
+/* ==================================================================== *
+ *  [stated 29 Oct] Overview: "Sold" is now "Payment details", and it shows
+ *  what the client was sent — the payment link, the NEFT / RTGS details or
+ *  the proforma invoice — once Ops returns them (or the insurer's link on
+ *  the instant route).
+ * ==================================================================== */
+function payAcctNo(l){ var n=(l.id.replace(/\D/g,'')+'0000').slice(0,4); return '5020 0'+n.slice(0,3)+' '+n.slice(3)+'731'; }
+payDetails=(function(p0){ return function(l){ return p0(l).map(function(r){ return r[0]==='Account number'?[r[0],'<span class="mono">'+esc(payAcctNo(l))+'</span>']:r; }); }; })(payDetails);
+function payDetailsSub(l){ var inst=isChola(l)||l.route==='INSTANT', rows=[], note='', mode='';
+  var copy=function(t){ return ' <button type="button" class="link" data-paycopy="'+esc(t)+'">Copy</button>'; };
+  var DROP={'Reference to quote':1,'Amount':1,'From':1};
+  if(inst){ mode='Payment link';
+    if(l.chola&&l.chola.link){ var exp=typeof cholaLinkExpired==='function'&&cholaLinkExpired(l);
+      rows.push(['Payment link','<span class="mono">'+esc(l.chola.link)+'</span>'+copy(l.chola.link)+(exp?' '+chip('Expired','red',false,true):'')]); }
+    else note='The insurer’s payment link appears here once it is generated.'; }
+  else if(l.pay==='cheque'){ mode='Cheque'; rows=payDetails(l); }
+  else if(l.pay==='back'||l.pay==='shared'||l.pay==='paid'||(l.stage>=11&&l.pay&&l.pay!=='pre'&&l.pay!=='ticket')){ mode=payModeOf(l);
+    rows=payDetails(l).map(function(r){ var k=r[0];
+      if(k==='Payment link'){ var url='https://pay.'+payInsurer(l).toLowerCase().replace(/[^a-z]+/g,'')+'.com/bk/'+l.id.toLowerCase(); return ['Payment link','<span class="mono">'+esc(url)+'</span>'+copy(url)]; }
+      if(k==='Proforma invoice') return ['Proforma invoice','<button type="button" class="link" data-flow="proformaView" data-line="'+l.id+'">'+ic('file','ic14')+' Proforma invoice · '+esc(payInsurer(l))+'.pdf</button>'];
+      if(k==='IFSC') return ['IFSC code',r[1]];
+      return r; }); }
+  else if(l.pay==='ticket') note='With Ops on '+payRef(l)+'. The payment details appear here when Ops closes the ticket — and go to the client by email at the same moment.';
+  else note='Raise the payment request to get the payment details from Ops.';
+  rows=rows.filter(function(r){ return !DROP[r[0]]; });
+  var base=[['Insurer',esc(l.picked||l.ins||'—')],['Branch',esc(l.insBranch||'—')],['Premium','<b>'+INR(premOf(l))+'</b>']];
+  var sent=(l.payMails||[]), last=sent.slice(-1)[0];
+  return '<div class="phhd"><div class="t">Payment details'+(mode&&rows.length?' <span class="meta">· '+esc(mode)+'</span>':'')+'</div></div>'+
+    '<div class="kvgrid mt12">'+base.concat(rows).map(function(r){ return kv(r[0],r[1]); }).join('')+'</div>'+
+    (!rows.length&&note?'<div class="meta mt8">'+esc(note)+'</div>':''); }
+HANDLERS.push(function(t){ var x=t.closest('[data-paycopy]'); if(!x) return false; try{ if(navigator.clipboard) navigator.clipboard.writeText(x.dataset.paycopy).catch(function(){}); }catch(e){} toast('Copied',x.dataset.paycopy); return true; });
+FLOWS.proformaView={t:'Proforma invoice', sub:function(){ var l=FL(); return payInsurer(l)+' · '+l.product; }, wide:true, nocancel:function(){ return false; },
+  body:function(){ var l=FL(), a=acctOf(l), amt=l.amt||premOf(l);
+    return '<div class="mailprev"><div class="h4">'+esc(payInsurer(l))+' — Proforma invoice</div><div class="meta">Ref Q-'+esc(l.id.slice(3))+'-26 · issued '+esc(fmtD(S.now))+'</div>'+
+      '<div class="kvgrid two mt12">'+kv('Billed to',esc(a?a.n:'—'))+kv('Product',esc(l.product))+kv('Premium (incl. GST)','<b>'+INR(amt)+'</b>')+kv('Pay by',esc(fmtD(addWork(S.now,durMins(3,'d')))))+'</div>'+
+      '<div class="meta mt12">Returned by Ops on '+esc(payRef(l))+' and emailed to the client with the payment details.</div></div>'; },
+  ok:'Close', run:function(){} };
 
 /* ==== ABM (v75) ==== */
 (function(){

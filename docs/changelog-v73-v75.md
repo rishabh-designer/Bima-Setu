@@ -1,8 +1,9 @@
-# BimaSetu CRM — what changed v73 → v75 (and 27 Oct)
+# BimaSetu CRM — what changed v73 → v75 (and 27 and 29 Oct)
 
 > **Derived, not official.** No changelog document was supplied for these versions. This summary is
 > taken from the prototype's own build notes and the `[stated …]` comments at the top of each new
-> section of code (artifact version `1793105277-a808`, storage key `bksales.v25`). Replace it with
+> section of code (artifact versions `1793105277-a808` and, for 29 Oct, `1793276861-8b77`; storage key
+> `bksales.v25`). Replace it with
 > the official changelog when there is one.
 
 ## v74 — 23 Oct 2026: the amendments after v73
@@ -49,6 +50,20 @@ OP-2145 to OP-2147.
 - **Users master and reporting lines** (`app/43-users-master.js`): each person has a function (Pre-sales,
   Sales, Post-sales), a role (Manager or Executive) and a *Reports to*; you see yourself and everyone below
   you.
+
+## 29 Oct 2026
+- **Payment details go to the client automatically** (`app/35-payment-details-auto.js`). When Ops closes the
+  payment ticket at *Payment details sent*, BimaSetu emails the details to the client contact on the request
+  (email only, no RM or Sales name in the body) and moves the opportunity to Payment Details Shared with
+  Client by itself. For a multiple payment, every opportunity on the ticket moves. The manual *Share with
+  client* step is gone. While the opportunity is at that stage the user can *Resend* — a new email with the
+  same details.
+- **Overview: "Sold" is now "Payment details"** (`app/35-payment-overview.js`): insurer, branch and premium,
+  then what the client was sent — the insurer's payment link on the instant route, the NEFT / RTGS details
+  or the proforma invoice — with *Copy* on links. Before that it says where the details are (with Ops on
+  the ticket, or the link not yet generated).
+- Related edits: the stage-11 next action, the Overview layout, the simulated event *Ops sends the details
+  and closes the ticket*, and the email-preview style.
 
 ## v75 — 23 Oct 2026: the ABM pre-sales journey
 Code: `app/36-abm-call-email.js` to `app/41-abm-team.js`.

@@ -244,7 +244,7 @@ function nextAction0(l){
       if(l.pay==='ticket') return {tone:'violet',lab:'With Ops',txt:'Payment ticket '+payRef(l)+' with ops',why:'Ops prepares the payment details. They come back here.',acts:[['go:ticket:'+payRef(l),'Open ticket']]};
       if(l.pay==='back') return {tone:'amber',lab:'Next action',txt:'Payment details sent by Ops, not yet sent to the client',why:'Desk stage: Payment details sent. Payment mode: '+payModeOf(l)+'.',acts:[['share','Share with client']]};
       return {tone:'amber',lab:'Next action',txt:'Ready for a payment request',why:'One request can cover several of your lines on the opportunity.',acts:[['pay','Raise payment request']]};
-    case 11: var d10=daysInStage(l); return {tone:'blue',lab:'Waiting on the client',txt:'Shared '+(d10?plural(d10,'day')+' ago':'today')+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment']]};
+    case 11: var d10=daysInStage(l), lm=(l.payMails||[]).slice(-1)[0]; return {tone:'blue',lab:'Waiting on the client',txt:'Payment details sent to the client'+(lm?' · '+fmt(lm.at):(d10?' '+plural(d10,'day')+' ago':''))+'. Waiting for the payment screenshot',why:'Payment mode: '+payModeOf(l)+'. Emailed automatically when Ops closed the payment ticket'+((l.payMails||[]).length>1?' · resent '+plural(l.payMails.length-1,'time'):'')+'. When the client sends the screenshot, upload it to confirm.',acts:[['proof','Confirm payment'],['payResend','Resend payment details']]};
   }
   return {tone:'neutral',lab:'',txt:'',why:'',acts:[]};
 }

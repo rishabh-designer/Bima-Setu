@@ -116,8 +116,9 @@ const { chromium } = require('playwright');
   await expectStage('OP-2001', 10, 'Chola confirmed — a verified account skips KYC Details Requested [v73]');
   await expect('Capture the details Cholamandalam needs to issue', 'stage 10 next action');
   await click('[data-uv="overview"]');
-  await expect('Sold', 'Sold block in Overview [v54]');
-  await expect('Link not generated', 'Sold block payment status');
+  const phhd = await page.$$eval('#app .phhd .t', e => e.map(x => x.innerText));
+  if (!phhd.some(t => /^Payment details/.test(t)) || phhd.some(t => /^Sold\b/.test(t))) fail('Overview: "Sold" is now "Payment details" [29 Oct], got ' + phhd.join(' | '));
+  await expect('The insurer’s payment link appears here once it is generated', 'Payment details before the link [29 Oct]');
   await click('[data-flow="cholaKyc"]');
   await click('[data-mset="csole"][data-mval="n"]'); await click('[data-commit]');                       // 1 Details
   await pick('#f_cworker', 'Factory worker'); await pick('#f_criskloc', 'Specific Location');           // 2 Risk
@@ -139,6 +140,7 @@ const { chromium } = require('playwright');
   if (!(await page.$eval('#ovl', o => [...o.querySelectorAll('input')].some(i => /^https:\/\/pay\.cholams/.test(i.value))))) fail('payment link should be a Cholamandalam link');
   await click('[data-commit]');
   await expectStage('OP-2001', 11, 'link sent');
+  if (!(await page.$('#app [data-paycopy^="https://pay.cholams"]'))) fail('Payment details should show the Cholamandalam link that was sent, with Copy [29 Oct]');
   await expect('expires in 24h', 'link valid 24h');
   // the link lapses after 24 hours and is regenerated [v51, v53]
   await click('[data-sim="cholaExpire"]');
@@ -269,8 +271,14 @@ const { chromium } = require('playwright');
   const pays = await page.evaluate(() => ['OP-2006', 'OP-2007'].map(id => ticketsOf(lineById(id)).filter(t => /^PAY-/.test(t.id)).map(t => t.id).join('/')));
   if (!pays[0] || pays[0] !== pays[1]) fail('both opportunities should sit on one payment ticket: ' + pays.join(' vs '));
   await openLine('OP-2006');
-  await click('[data-sim="extOps"]'); await click('[data-flow="share"]'); await click('[data-commit]');
-  for (const id of ['OP-2006', 'OP-2007']) await expectStage(id, 11, 'details shared once for both');
+  await click('[data-sim="extOps"]');                              // Ops closes the ticket: the details go to the client by themselves [29 Oct]
+  for (const id of ['OP-2006', 'OP-2007']) await expectStage(id, 11, 'details emailed automatically when Ops closes the ticket [29 Oct]');
+  const mails = await page.evaluate(() => ['OP-2006', 'OP-2007'].map(id => (lineById(id).payMails || []).filter(m => !m.resend && m.to).length).join('/'));
+  if (mails !== '1/1') fail('one automatic email to the client contact per opportunity, got ' + mails);
+  await expect('Emailed automatically when Ops closed the payment ticket', 'stage 11 next action [29 Oct]');
+  if (await page.$('[data-flow="share"]')) fail('the manual share step is gone [29 Oct]');
+  await click('[data-flow="payResend"]'); await click('[data-commit]');
+  if ((await page.evaluate(() => (lineById('OP-2006').payMails || []).filter(m => m.resend).length)) !== 1) fail('a resend at Payment Details Shared should record a new email [29 Oct]');
   await click('[data-sim="extPaid"]'); await click('[data-flow="proof"]'); await click('[data-proofsample]'); await page.waitForTimeout(1200); await click('[data-commit]');
   for (const id of ['OP-2006', 'OP-2007']) await expectStage(id, 12, 'one proof completes each opportunity');
   await expect('Won', 'Won is derived from Payment Completed [v71]');

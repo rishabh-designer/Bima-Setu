@@ -47,7 +47,7 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, forty-five JS modules, repo fixes
+app/            the source — one stylesheet fragment, forty-seven JS modules, repo fixes
 build.mjs       concatenates app/ into public/index.html
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          smoke.js (assertions) and shots.js (screenshots)
@@ -82,7 +82,7 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `22-docs.js` | The document viewer — view and download, every document type |
 | `23-helpers.js` | Shared helpers — panel states, activity kinds, renewal and lead priority |
 | `24`–`33` | v74 — payment and issuance tickets, instant link vs Ops ticket, call tasks, website drop-off, quotes decide the route, addresses, simulated events, seed |
-| `34`–`35` | Raise ticket (endorsements and claims only) and fallback users |
+| `34`–`35` | Raise ticket (endorsements and claims only), fallback users, payment details emailed to the client automatically, and the Overview's *Payment details* block (the ABM shared helpers begin at the end of `35-payment-overview.js`) |
 | `36`–`41` | ABM pre-sales — prospect calls and email, tasks, the glue into BimaSetu, configurator stages, the ABM pool and team |
 | `42-rm-allocation.js` | RM allocation master — editable, live at Payment Completed |
 | `43-users-master.js` | Users master and reporting lines |

@@ -99,7 +99,4 @@ FLOWS.cholaShare={t:'Share the policy copy', sub:'The insurer issued it on payme
   ok:'Share policy copy',
   run:function(){ var l=FL(); var ok=write(function(){ l.chola=l.chola||{}; l.chola.shared=S.now; logAdd(l,'Policy copy and tax invoice shared with the client','System · issued in real time by '+shortIns(l.picked)+' · three rails · no post-purchase ticket','post',1); moveStage(l,15,'Policy copy shared with the client'); },'the share');
     if(!ok) return 'fail'; toast('Shared','Policy copy and tax invoice sent to the client.'); }};
-function soldBlock(l){ var payTx;
-  if(isChola(l)){ var ins=shortIns(l.picked); payTx=(l.chola&&l.chola.paid)?'Paid on '+ins+'’s link':(l.stage>=11?'Payment link sent':((l.chola&&l.chola.link)?'Link generated':'Link not generated yet')); }
-  else { payTx=l.pay==='pre'?'Not requested':(l.pay==='ticket'?'With Ops · '+PAY_DESK[Math.min(2,l.payDesk||0)]:(l.pay==='back'?'Payment details sent':(l.pay==='cheque'?'Cheque — to collect':(l.pay==='shared'?'Shared with client':'Paid')))); }
-  return '<div class="phhd"><div class="t">Sold</div></div><div class="kvgrid mt12">'+kv('Insurer',esc(l.picked||l.ins||'—'))+kv('Confirmed premium','<b>'+INR(premOf(l))+'</b>')+kv('Payment',esc(payTx))+kv('Route',l.route==='INSTANT'?'Instant purchase':'Ops ticket')+kv('Insurer branch',esc(l.insBranch||'—'))+'</div>'; }
+function soldBlock(l){ return payDetailsSub(l); }

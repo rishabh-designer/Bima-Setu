@@ -116,14 +116,14 @@ SCREENS.line=function(){
   var tks=ticketsOf(l), ltasks=tasksOfLine(l.id).filter(function(t){return !t.done;});
   var body='';
   if(tab==='overview'){
+    var ovReq=(l.stage>=1?reqSection(l,true):''), ovRc=reqCount(l), ovHas=ovRc.n>0||Object.keys(l.reqOnline||{}).length>0, ovPay=(l.stage>=9&&l.picked?soldBlock(l):'');
     body='<div class="phhd"><div class="t">Captured at creation</div><div class="a">Line age <b>'+plural(daysBetween(l.createdAt,S.now),'day')+'</b></div></div><div class="kvgrid mt12">'+
       (o?kv('Business type',o.bt===o.type?esc(o.type):esc(o.bt)+' · '+esc(o.type))
          :kv('Business type','Renewal <span class="meta">· no opportunity — a renewal is a product line on the account</span>'))+(l.renews?renOverview(l):'')+
       kv('Source',esc(l.src||(o?o.src:'')||'—'))+kv('Created',esc(fmtD(l.createdAt)))+
       kv('Calls',plural(callsMade(l),'call')+(l.status==='open'&&(l.miss||0)?'<div class="meta">'+plural(l.miss,'missed call')+' since the last connect</div>':''))+
-      (l.inbound?kv('Done online',esc(({legs:plural(l.inbound.legs||0,'step')+' of 4 discovery steps',rated:'Discovery and the rater’s quotes',selected:'Discovery, quotes and a quote selection'})[l.inbound.step]||'Contact details only')):'')+'</div>'+(l.renews?renFlag(l):'')+
-      (l.stage>=9&&l.picked?diamonds(true)+soldBlock(l):'')+
-      (l.stage>=1?diamonds(true)+reqSection(l,true):'');
+      (l.inbound?kv('Done online',esc(({legs:plural(l.inbound.legs||0,'step')+' of 4 discovery steps',rated:'Discovery and the rater’s quotes',selected:'Discovery, quotes and a quote selection'})[l.inbound.step]||'Contact details only')):'')+'</div>'+(l.renews?renFlag(l):'');
+    body=[ovPay, ovHas?ovReq:'', body, ovHas?'':ovReq].filter(Boolean).join(diamonds(true));
   } else if(tab==='req'){
     body=reqSection(l,true); 
   } else if(tab==='post'){ body=postTab(l); }
@@ -257,7 +257,7 @@ function runSim(k,l){
     if(k==='plcQuery'){ l.plcQ=1; l.qAt=0; logAdd(l,'Placement raised a query','System · ticket PLC-'+l.id.slice(3)+' · '+PLC_QUERY,'sys',1); }
     if(k==='extNone'){ l.allDecl=1; logAdd(l,'Placement ticket responded — every insurer declined','System · ticket PLC-'+l.id.slice(3)+' · no quotes on round '+l.round,'sys',1); moveStage(l,7,'Placement ticket responded with no quotes'); }
     if(k==='extPlc'){ l.allDecl=0; l.qAt=S.now; logAdd(l,'Quotes returned by placement','System · ticket PLC-'+l.id.slice(3),'sys',1); moveStage(l,7,'Quotes received from placement'); }
-    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; x.payDesk=3; x.payDeskAt=S.now; logAdd(x,'Payment details sent by Ops','System · ticket '+payRef(x)+' · desk stage Payment details sent · '+payModeOf(x),'sys',1); }); }
+    if(k==='extOps'){ (l.payLines&&l.payLines.length?l.payLines:[l.id]).forEach(function(id){ var x=lineById(id); if(!x||x.pay!=='ticket') return; x.pay='back'; x.payDesk=3; x.payDeskAt=S.now; logAdd(x,'Payment details sent by Ops','System · ticket '+payRef(x)+' · desk stage Payment details sent · '+payModeOf(x),'sys',1); }); payAutoSend(l); }
     if(k==='extPaid'){ logAdd(l,'Payment screenshot received from client','System · on email','pay',1); }
     if(k==='extTake'){ var u=userById(l.owner); var m=u&&u.mgr?u.mgr:'vikram'; if(S.data.took.indexOf(l.id)<0) S.data.took.push(l.id); l.prevOwner=l.owner; l.owner=m; logAdd(l,'Owner changed from '+uname(l.prevOwner)+' to '+uname(m)+' — client escalation','by '+uname(m)+' · Take ownership','sys',1); }
     if(k==='cholaPaid'){ if(cholaLinkExpired(l)) return; var a=acctOf(l), rm=rmFor(a,l.product);
@@ -273,7 +273,7 @@ function runSim(k,l){
     if(k==='cholaExpire'){ l.chola=l.chola||{}; if(l.chola.linkAt) l.chola.linkAt=S.now-instTTL(l)-1; logAdd(l,'Payment link expired','System · the '+validTx(l)+' '+shortIns(l.picked)+' link lapsed unpaid · regenerate to send a fresh link','sys',1); }
   },'the simulated event');
   if(!ok) return;
-  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops sent the payment details','Desk stage Payment details sent. The line stays at Purchase Requested — share them with the client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
+  var msg={rfqClient:['The client approved the RFQ','Now at RFQ Verified by Client — float it to placement'],raterNone:['No rater quotes — switched to the RFQ route','Still at Details Captured. The RFQ is open on the RFQ & quotes tab'],plcQuery:['Placement raised a query','Answer it on the placement ticket — the stage does not move.'],extPlc:['QCR back from placement','Now at Quotes Received'],extNone:['Every insurer declined','Close it as No Appetite — not Lost'],extOpsQ:['Ops has a query','Answer it on the ticket. The stage does not move.'],extExpire:['Payment link expired','Ops closed the ticket. Raise a new payment request — the old one is never reopened.'],extOps:['Ops closed the payment ticket','The payment details were emailed to the client automatically · now at Payment Details Shared with Client'],extPaid:['The client sent the payment screenshot','Upload it in Confirm payment to close the sale'],extTake:['This line is no longer yours','Your manager took it over while you were looking. The screen is now read-only.'],cholaPaid:['Paid on Cholamandalam’s link','Policy issued in real time — no ticket. Share the copy with the client.'],cholaExpire:['Payment link expired','The 24-hour link lapsed unpaid. Regenerate it from the line.']}[k];
   paint(); toast(msg[0],msg[1]);
 }
 

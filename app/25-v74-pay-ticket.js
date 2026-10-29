@@ -23,7 +23,7 @@ function payTurnKv(l,c){
 function paySimBtns(l){ var b=[], d=l.payDesk||0;
   if(d<1) b.push(simbtn('Ops picks it up — Link generation','data-v74sim="payRoute" data-line="'+l.id+'"'));
   else if(d<2&&payModeOf(l)==='Payment link') b.push(simbtn('Ops asks the insurer for the link — Awaiting payment details','data-v74sim="payAwait" data-line="'+l.id+'"'));
-  b.push(simbtn('Ops sends the payment details','data-sim="extOps" data-line="'+l.id+'"'));
+  b.push(simbtn('Ops sends the details and closes the ticket','data-sim="extOps" data-line="'+l.id+'"'));
   return b; }
 
 /* [stated 23 Oct · new behaviour 1] the same insurer is the seventh condition on the multi-payment gate */
