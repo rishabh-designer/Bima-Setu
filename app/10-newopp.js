@@ -27,26 +27,28 @@ function openProductOn(a,product,skipOpp){ if(!a||!product) return null;
 function openProductWarn(a,product,skipOpp){ var o=openProductOn(a,product,skipOpp); return o?'Product line for '+product+' already open in opportunity '+o.id+'.':''; }
 function newOppErr(){
   var e={}, was=function(k){ return S.sel[k]!==undefined; };
-  var ge=gstErr(noVal('gst')); if(ge) e.gst=ge;
+  var ge=custT()==='sole_nogst'?aadErr(noVal('aad')):gstErr(noVal('gst')); if(ge) e.gst=ge;
   if(was('m')) { var me_=mobileErr(noVal('m')); if(me_) e.m=me_; }
   if(was('e')) { var ee=emailErr(noVal('e')); if(ee) e.e=ee; }
   return e;
 }
-function newOppState(){ var e=newOppErr(), gst=noVal('gst').toUpperCase(), m=e.gst?null:matchAcct('',gst), locked=!!(m&&m.a);
+function newOppKey(){ return custT()==='sole_nogst'?noVal('aad'):noVal('gst').toUpperCase(); }
+function newOppMatch(){ return custT()==='sole_nogst'?matchAad(noVal('aad')):matchAcct('',noVal('gst').toUpperCase()); }
+function newOppState(){ var e=newOppErr(), aadP=custT()==='sole_nogst', gst=newOppKey(), m=e.gst?null:newOppMatch(), locked=!!(m&&m.a);
   var hint;
-  if(!gst) hint='<span class="meta">A provisional account will be created. It becomes verified when the GST certificate (or Aadhaar for a proprietor) arrives at KYC.</span>';
+  if(!gst) hint='<span class="meta">A provisional account will be created. It becomes verified when '+(aadP?'the PAN card and Aadhaar arrive':'the PAN card and GST certificate arrive')+' at KYC.</span>';
   else if(e.gst) hint='';
   else if(locked) hint='<span class="nomatch on">'+ic('circlecheck','ic14')+'<b>'+esc(m.a.n)+'</b> · '+esc(m.a.id)+' · '+esc(m.a.city||'—')+' · owner '+esc(uname(m.a.own))+' · '+(m.a.prov?'Provisional':'Verified')+'</span>';
-  else hint='<span class="meta">No account carries this GSTIN. A new account will be created.</span>';
+  else hint='<span class="meta">No account carries this '+(aadP?'Aadhaar number':'GSTIN')+'. A new account will be created.</span>';
   return {e:e, m:m, locked:locked, name:locked?m.a.n:'', hint:hint, warn:locked?openProductWarn(m.a,S.sel.product):''}; }
-FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportunity'; }, sub:function(){ return S.sel.done?'':(S.sel.acct?'On the selected account — just the product, business type and source.':'GSTIN first — it finds the company if it is already here. With no GSTIN, a provisional account is created with the opportunity.'); }, wide:true,
+FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportunity'; }, sub:function(){ return S.sel.done?'':(S.sel.acct?'On the selected account — just the product, business type and source.':'Two questions first. Then the GST number — or Aadhaar for a sole proprietor without GST — finds the company if it is already here. Left blank, a provisional account is created.'); }, wide:true,
   repaintOn:['product','src'],
   nofoot:function(){ return !!S.sel.done; },
   body:function(){
     if(S.sel.done){ var d=S.sel.done, a=by(S.data.accounts,d.acct), l=lineById(d.line), o=by(S.data.opps,d.opp);
       /* [stated 26 Sep · 3.1 §7] four lines, Open the account, and a single Done */
       return '<dl class="kvlist" style="grid-template-columns:140px 1fr;row-gap:12px">'+
-        '<dt>Account</dt><dd>'+esc(a.n)+' <span class="meta">· '+esc(a.id)+' · '+(d.newAcct?'new, ':'matched on GSTIN, ')+(a.prov?'provisional':'verified')+'</span></dd>'+
+        '<dt>Account</dt><dd>'+esc(a.n)+' <span class="meta">· '+esc(a.id)+' · '+(d.newAcct?'new, ':'matched on '+(d.how||'GSTIN')+', ')+(a.prov?'provisional':'verified')+'</span></dd>'+
                 '<dt>Opportunity</dt><dd>'+esc(l.product)+' <span class="meta">· '+esc(l.id)+' · New Lead</span></dd>'+
         '<dt>Owner</dt><dd>'+esc(uname(l.owner))+(l.owner===S.user?' <span class="meta">· you</span>':'')+'</dd></dl>'+
         '<div class="flex wrap mt16"><span class="sp"></span><button class="btn" data-go="acct" data-id="'+a.id+'">Open the account</button><button class="btn primary" data-go="line" data-id="'+l.id+'">Done</button></div>';
@@ -55,7 +57,7 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
       if(AA){ var act=AA.con.filter(function(c){return !c.dep;});
         if(S.sel.con===undefined) S.sel.con=act[0]?act[0].n:'';
         var awarn=S.sel.product?openProductWarn(AA,S.sel.product,''):'';
-        return '<div class="kvgrid">'+kv('Account','<b>'+esc(AA.n)+'</b> '+(AA.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true)))+'</div>'+
+        return '<div class="kvgrid">'+kv('Account','<b>'+esc(AA.n)+'</b> '+(AA.prov?chip('Provisional','amber',false,true):chip('Verified','green',false,true)))+custKv(AA,false)+'</div>'+
           field('Contact for this opportunity', act.length?select('con',S.sel.con,act.map(function(c){return [c.n,c.n+(c.d?' · '+c.d:'')];})):'<div class="meta">No active contacts — add one on the account first.</div>','The RFQ and payment details go to this person.')+
           '<label class="field"><div class="lbl">Product</div>'+select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS))+'<div class="hint amber">'+esc(awarn)+'</div></label>'+
           '<div class="field"><div class="lbl">Business type</div><div class="fgrid">'+opt('data-mset="bt" data-mval="fresh"',S.sel.bt==='fresh','Fresh','Buying this cover for the first time')+opt('data-mset="bt" data-mval="roll"',S.sel.bt==='roll','Market rollover','Moving an existing policy from another broker or insurer')+'</div></div>'+
@@ -63,10 +65,11 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
       } }
     var st=newOppState();
     var bt=S.sel.bt;
-    return field('GSTIN',input('gst',S.sel.gst,'29AAACS1234F1Z5','style="text-transform:uppercase"'),'','')+
+    var cq=custQs(); if(!custT()) return cq;
+    return cq+(custT()==='sole_nogst'?field('Aadhaar number — optional',input('aad',S.sel.aad,'XXXX XXXX XXXX','inputmode="numeric"'),'',''):field('GST number — optional',input('gst',S.sel.gst,'29AAACS1234F1Z5','style="text-transform:uppercase"'),'',''))+
       '<div class="err" id="e_gst" style="margin-top:-10px">'+esc(st.e.gst||'')+'</div><div class="hint" id="h_gst" style="margin-top:-8px">'+st.hint+'</div>'+
-      '<label class="field"><div class="lbl">Company name (as per PAN)</div>'+input('name',st.locked?st.name:(S.sel.name||''),'The registered name, not a brand name',st.locked?'disabled':'')+'<div class="hint" id="h_name">'+(st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.')+'</div></label>'+
-      (st.locked?'':'<div class="fgrid">'+field('Communication address',input('caddr',S.sel.caddr,'Where letters and documents go'))+field('GST address — optional',input('gaddr',S.sel.gaddr,'As on the GST certificate'),'Leave blank to read it from the GST certificate at KYC.')+'</div>')+'<div class="fgrid">'+field('POC name',input('cn',S.sel.cn,'Who you are speaking to'))+field('POC mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+'</div>'+
+      '<label class="field"><div class="lbl">Company name (as per PAN)</div>'+input('name',st.locked?st.name:(S.sel.name||''),'The registered name, not a brand name',st.locked?'disabled':'')+'<div class="hint" id="h_name">'+(st.locked?'Filled from the matched account. Clear the '+(custT()==='sole_nogst'?'Aadhaar number':'GSTIN')+' to type a name.':'Whatever is typed here is provisional until the account is verified.')+'</div></label>'+
+      (st.locked?'':'<div class="fgrid">'+field('Communication address',input('caddr',S.sel.caddr,'Where letters and documents go'))+(custT()==='sole_nogst'?'':field('GST address — optional',input('gaddr',S.sel.gaddr,'As on the GST certificate'),'Leave blank to read it from the GST certificate at KYC.'))+'</div>')+'<div class="fgrid">'+field('POC name',input('cn',S.sel.cn,'Who you are speaking to'))+field('POC mobile',input('m',S.sel.m,'+91 98xxx xxxxx'),'',st.e.m)+'</div>'+
       '<div class="fgrid">'+field('POC email',input('e',S.sel.e,'name@company.in'),'',st.e.e)+
         '<label class="field"><div class="lbl">Product</div>'+select('product',S.sel.product||'',[['','Choose a product']].concat(PRODUCTS))+'<div class="hint amber" id="h_prod">'+esc(st.warn)+'</div></label></div>'+
       '<div class="field"><div class="lbl">Business type</div><div class="fgrid">'+
@@ -77,21 +80,21 @@ FLOWS.newOpp={t:function(){ return S.sel.done?'Opportunity created':'New opportu
   live:function(){ var st=newOppState(), g=function(id){return document.getElementById(id);}, n=g('f_name');
     if(n){ n.disabled=st.locked; if(st.locked) n.value=st.name; else if(S.sel.wasLocked){ n.value=''; S.sel.name=''; } S.sel.wasLocked=st.locked; }
     if(g('e_gst')) g('e_gst').textContent=st.e.gst||''; if(g('h_gst')) g('h_gst').innerHTML=st.hint;
-    if(g('h_name')) g('h_name').textContent=st.locked?'Filled from the matched account. Clear the GSTIN to type a name.':'Whatever is typed here is provisional until the account is verified.';
+    if(g('h_name')) g('h_name').textContent=st.locked?'Filled from the matched account. Clear the '+(custT()==='sole_nogst'?'Aadhaar number':'GSTIN')+' to type a name.':'Whatever is typed here is provisional until the account is verified.';
     if(g('h_prod')) g('h_prod').textContent=st.warn;
     [['f_m',st.e.m],['f_e',st.e.e]].forEach(function(x){ var el=g(x[0]); if(!el) return; var lab=el.closest('.field'); if(!lab) return; var er=lab.querySelector('.err'); if(x[1]){ if(!er){ er=document.createElement('div'); er.className='err'; lab.appendChild(er); } er.textContent=x[1]; } else if(er) er.remove(); }); },
-  can:function(){ if(S.sel.done) return false; if(S.sel.acct){ var _AA=by(S.data.accounts,S.sel.acct); return !!_AA&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt&&!!S.sel.con; } var gst=noVal('gst').toUpperCase(); if(gstErr(gst)) return false; var m=matchAcct('',gst);
+  can:function(){ if(S.sel.done) return false; if(S.sel.acct){ var _AA=by(S.data.accounts,S.sel.acct); return !!_AA&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt&&!!S.sel.con; } if(!custT()) return false; if(newOppErr().gst) return false; var m=newOppMatch();
     var name=(m&&m.a)?m.a.n:noVal('name'); return !!name&&((m&&m.a)?true:!!noVal('caddr'))&&!!noVal('cn')&&digits(noVal('m')).length>=10&&!!noVal('e')&&!emailErr(noVal('e'))&&!!S.sel.product&&!!S.sel.src&&!!S.sel.bt; },
-  ok:function(){ if(S.sel.acct){ return 'Create on '+S.sel.acct; } var m=matchAcct('',noVal('gst')); return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
+  ok:function(){ if(S.sel.acct){ return 'Create on '+S.sel.acct; } var m=custT()?newOppMatch():null; return m&&m.a?'Create on '+m.a.id:'Create opportunity'; },
   run:function(){ if(S.sel.acct){ var aa=by(S.data.accounts,S.sel.acct); if(!aa) return 'fail'; var rr={};
       var ok2=write(function(){ var c=aa.con.filter(function(x){return x.n===S.sel.con&&!x.dep;})[0]||aa.con[0]||{n:'',e:'',m:''};
         var oo={id:newOppId(),acct:aa.id,type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user,log:[]}; S.data.opps.push(oo); oppLog(oo,'Opportunity created',uname(S.user)+' · '+S.sel.src+' · '+BTYPE[S.sel.bt]);
         var l=newLine({opp:oo.id,acct:aa.id,product:S.sel.product,owner:S.user,src:S.sel.src,contact:c,how:uname(S.user)+' · New opportunity'}); oppLog(oo,'Product line added: '+l.product,'by '+uname(S.user)); fireRules(l,'stage',1);
         rr={acct:aa.id,opp:oo.id,line:l.id,newAcct:false}; },'the opportunity');
       if(!ok2) return 'fail'; S.sel={done:rr}; paint(); toast('Opportunity created','On '+aa.n+'. The opportunity is yours.'); return 'stay'; }
-    var gst=noVal('gst').toUpperCase(), m=matchAcct('',gst), a=m&&m.a?m.a:null, newAcct=!a, res={};
+    var ct=custT(), aadP=ct==='sole_nogst', gst=aadP?'':noVal('gst').toUpperCase(), aad=aadP?aadFmt(noVal('aad')):'', m=newOppMatch(), a=m&&m.a?m.a:null, newAcct=!a, res={};
     var ok=write(function(){
-      if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); a.commAddr=noVal('caddr'); a.gstAddr=noVal('gaddr'); }
+      if(!a){ a=newAccount({n:noVal('name'),gst:gst,own:S.user,prov:gst?0:1,createdBy:S.user}); a.commAddr=noVal('caddr'); a.gstAddr=noVal('gaddr'); a.cust=ct; a.sole=aadP?1:0; if(aad) a.aad=aad; acctLog(a,'Customer type: '+CUST_LAB[ct],uname(S.user)+' · at creation'+(aad?' · Aadhaar '+aad.slice(-4)+' recorded':'')); }
       var c=conMatch(a,{n:noVal('cn'),m:noVal('m'),e:noVal('e')});
       if(!c){ c={n:noVal('cn'),d:'',m:noVal('m'),e:noVal('e')}; a.con.push(c); }
       var o={id:newOppId(),acct:a.id,type:'New Business',bt:BTYPE[S.sel.bt],src:S.sel.src,created:S.now,by:S.user,log:[]}; S.data.opps.push(o);

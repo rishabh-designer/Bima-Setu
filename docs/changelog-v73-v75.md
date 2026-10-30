@@ -1,10 +1,10 @@
-# BimaSetu CRM — what changed v73 → v75 (and 27 and 29 Oct)
+# BimaSetu CRM — what changed v73 → v75 (and 27, 29 and 30 Oct)
 
 > **Derived, not official.** No changelog document was supplied for these versions. This summary is
 > taken from the prototype's own build notes and the `[stated …]` comments at the top of each new
-> section of code (artifact versions `1793105277-a808` and, for 29 Oct, `1793276861-8b77`; storage key
-> `bksales.v25`). Replace it with
-> the official changelog when there is one.
+> section of code (artifact versions `1793105277-a808`, `1793276861-8b77` for 29 Oct and
+> `1793365270-585f` for 30 Oct; storage key `bksales.v25`). Replace it with the official changelog when
+> there is one.
 
 ## v74 — 23 Oct 2026: the amendments after v73
 Code: `app/24-v74.js` to `app/33-v74-seed.js`.
@@ -65,6 +65,19 @@ OP-2145 to OP-2147.
 - Related edits: the stage-11 next action, the Overview layout, the simulated event *Ops sends the details
   and closes the ticket*, and the email-preview style.
 
+## 30 Oct 2026 (v75.32): customer type at creation
+Code: `app/44-customer-type.js`, with edits in `app/07-verify.js`, `app/09-acct.js` and `app/10-newopp.js`.
+
+- **New opportunity asks two questions first:** *Is the customer a sole proprietor?* and, if yes, *Does the
+  customer have GST?* Not a sole proprietor, or a sole proprietor with GST → the GST number (optional) now,
+  the PAN card and GST certificate at KYC. A sole proprietor without GST → the Aadhaar number (optional)
+  now — twelve digits, and it finds an existing account — with no GST address, and the PAN card and
+  Aadhaar at KYC.
+- **The answers live on the account** as its *Customer type* (Profile and Compliance tabs). They can be
+  edited only while the account is provisional, and every change is logged.
+- **KYC follows the customer type** with no choice of second document. A sole proprietor with GST no longer
+  has "PRIVATE LIMITED" added to the legal name.
+
 ## v75 — 23 Oct 2026: the ABM pre-sales journey
 Code: `app/36-abm-call-email.js` to `app/41-abm-team.js`.
 
@@ -84,3 +97,6 @@ Code: `app/36-abm-call-email.js` to `app/41-abm-team.js`.
 - **Not fixed — reported:** an instant-route opportunity on a provisional account waits at KYC Details
   Requested (stage 9) with an empty next-action card, so it offers no *Get verified*. `cholaSalesNext()`
   covers stages 10–11 only. KYC can still be completed from Account 360, and the opportunity then moves on.
+- **Not fixed — reported (30 Oct):** when a provisional account's customer type is edited from *Sole
+  proprietor · no GST* to *has GST*, KYC asks for the GST certificate but the Compliance tab still lists
+  Aadhaar as the identity document, because that list keys off the Aadhaar number already on the account.

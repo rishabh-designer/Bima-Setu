@@ -392,6 +392,10 @@ const { chromium } = require('playwright');
   await expect('Meridian Chemicals', 'finder');
   log('acct ok');
   await click('[data-flow="newOpp"]');
+  // two questions first: the customer type decides the id asked for and the KYC documents [30 Oct]
+  if (!(await page.$eval('#ovl [data-commit]', b => b.disabled)) || (await page.$('#f_name'))) fail('New opportunity should ask the customer type before anything else [30 Oct]');
+  await click('[data-mset="isSole"][data-mval="n"]');
+  await expect('KYC will ask for the PAN card and the GST certificate', 'not a sole proprietor → GST [30 Oct]');
   // no GSTIN → a provisional account; contact needs a mobile and an email
   await fill('#f_name', 'Fresh Test Co'); await fill('#f_caddr', 'Plot 4, MIDC Bhosari, Pune');   // a new account needs its address [v74 §7]
   await fill('#f_cn', 'A Person'); await fill('#f_m', '9876543210'); await fill('#f_e', 'a@b.co');
@@ -399,8 +403,42 @@ const { chromium } = require('playwright');
   await click('[data-mset="bt"][data-mval="roll"]');
   await click('[data-commit]');
   await expect('new, provisional', 'newopp provisional');
-  if (!(await page.evaluate(() => (S.data.accounts.find(a => a.n === 'Fresh Test Co') || {}).prov))) fail('a new opportunity without a GSTIN should open a provisional account');
+  const freshAcct = await page.evaluate(() => { const a = S.data.accounts.find(a => a.n === 'Fresh Test Co') || {}; return { prov: a.prov, cust: a.cust }; });
+  if (!freshAcct.prov) fail('a new opportunity without a GSTIN should open a provisional account');
+  if (freshAcct.cust !== 'co') fail('the customer type should be stored on the account [30 Oct], got ' + freshAcct.cust);
   await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  // a sole proprietor without GST gives Aadhaar instead, and KYC asks for the PAN card and Aadhaar [30 Oct]
+  await click('[data-flow="newOpp"]');
+  await click('[data-mset="isSole"][data-mval="y"]'); await click('[data-mset="hasGst"][data-mval="n"]');
+  if (!(await page.$('#f_aad')) || (await page.$('#f_gst')) || (await page.$('#f_gaddr'))) fail('a sole proprietor without GST should be asked for Aadhaar, not a GSTIN or GST address [30 Oct]');
+  await fill('#f_aad', '1234 5678'); await fill('#f_name', 'Sole Test Traders'); await fill('#f_caddr', 'Shop 2, Market Road, Nashik');
+  await fill('#f_cn', 'Ravi Patil'); await fill('#f_m', '9876543210'); await fill('#f_e', 'ravi@soletest.in');
+  await pick('#f_product', 'Fire & Special Perils'); await pick('#f_src', 'Referral'); await click('[data-mset="bt"][data-mval="fresh"]');
+  await expect('An Aadhaar number is twelve digits', 'Aadhaar check');
+  if (!(await page.$eval('#ovl [data-commit]', b => b.disabled))) fail('an Aadhaar number that is not twelve digits should block Create');
+  await fill('#f_aad', '1234 5678 9012');
+  await click('[data-commit]');
+  const soleAcct = await page.evaluate(() => { const a = S.data.accounts.find(a => a.n === 'Sole Test Traders') || {}; return { id: a.id, prov: a.prov, cust: a.cust, aad: a.aad }; });
+  if (!soleAcct.prov || soleAcct.cust !== 'sole_nogst' || soleAcct.aad !== '1234 5678 9012') fail('a sole proprietor without GST should get a provisional account with Aadhaar on it: ' + JSON.stringify(soleAcct));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  await page.evaluate((id) => go('acct', { id }), soleAcct.id); await page.waitForTimeout(80);
+  await click('[data-uv="comp"]');
+  await expect('Sole proprietor · no GST', 'Customer type on the account [30 Oct]');
+  await click('.content [data-flow="kyc"]');
+  await expect('Upload the PAN card and Aadhaar.', 'KYC follows the customer type [30 Oct]');
+  if (await page.$('#ovl [data-mset="route"]')) fail('KYC should no longer offer a choice of second document [30 Oct]');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  // the customer type can be edited while the account is provisional
+  await click('.content [data-flow="custEdit"]'); await click('[data-mset="hasGst"][data-mval="y"]'); await click('[data-commit]');
+  const edited = await page.evaluate((id) => { const a = S.data.accounts.find(a => a.id === id); return { cust: a.cust, log: (a.log && a.log[0] || {}).t }; }, soleAcct.id);
+  if (edited.cust !== 'sole_gst' || !/Customer type changed/.test(edited.log || '')) fail('Edit should save and log the customer type [30 Oct]: ' + JSON.stringify(edited));
+  await click('.content [data-flow="kyc"]');
+  await expect('Upload the PAN card and the GST certificate.', 'KYC after the customer type changes [30 Oct]');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  await page.evaluate(() => go('acct', { id: 'A-1001' })); await page.waitForTimeout(80);
+  await click('[data-uv="comp"]');
+  await expect('Not a sole proprietor', 'Customer type on a verified account');
+  if (await page.$('[data-flow="custEdit"]')) fail('a verified account’s customer type should not be editable [30 Oct]');
   log('newopp ok');
   await click('[data-nav="home"]');
   const inbound = await page.$$eval('[data-inbound]', e => e.map(x => x.dataset.inbound));

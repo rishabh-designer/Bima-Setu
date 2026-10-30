@@ -1,6 +1,6 @@
 # BimaSetu CRM — working prototype (v47)
 
-> **The repository is now at v75 (with the 27 and 29 Oct additions).** What changed since v47 is in
+> **The repository is now at v75 (with the 27, 29 and 30 Oct additions).** What changed since v47 is in
 > [`changelog-v48-v64.md`](changelog-v48-v64.md), [`changelog-v64-v73.md`](changelog-v64-v73.md) and
 > [`changelog-v73-v75.md`](changelog-v73-v75.md). This file is the record up to v47.
 

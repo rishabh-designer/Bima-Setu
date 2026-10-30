@@ -8,7 +8,7 @@ const { chromium } = require('playwright');
   await page.evaluate(() => go('line', { id: 'OP-2001' })); await shot('02-line');
   await page.evaluate(() => go('opp', { id: 'OPP-001001' })); await shot('03-opp');
   await page.evaluate(() => go('acct', { id: 'A-1001' })); await shot('04-acct');
-  await page.click('[data-flow="newOpp"]'); await page.fill('#f_gst', '27AABCS1234F1Z5'); await page.waitForTimeout(100); await shot('05-newopp');
+  await page.click('[data-flow="newOpp"]'); await page.click('[data-mset="isSole"][data-mval="n"]'); await page.fill('#f_gst', '27AABCS1234F1Z5'); await page.waitForTimeout(100); await shot('05-newopp');
   await page.keyboard.press('Escape');
   await page.evaluate(() => go('pipeline')); await shot('06-pipeline');
   await page.evaluate(() => go('tasks')); await shot('07-tasks');

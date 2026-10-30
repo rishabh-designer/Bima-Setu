@@ -1,6 +1,6 @@
 {
   "name": "bimasetu-crm-prototype",
-  "version": "75.1.0",
+  "version": "75.2.0",
   "private": true,
   "description": "BimaSetu CRM — a clickable prototype of the BimaKavach sales and relationship-management interface.",
   "type": "module",

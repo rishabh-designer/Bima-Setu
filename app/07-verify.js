@@ -11,7 +11,7 @@ function panLegalName(a){
   var n=String(a.n||'').trim()
     .replace(/\bPvt\.?\b/ig,'Private').replace(/\bLtd\.?\b/ig,'Limited')
     .replace(/\s+/g,' ').toUpperCase();
-  if(!/(PRIVATE LIMITED|PUBLIC LIMITED|LIMITED|LLP|PARTNERSHIP|ENTERPRISES|& SONS)$/.test(n) && !a.sole) n+=' PRIVATE LIMITED';
+  if(!/(PRIVATE LIMITED|PUBLIC LIMITED|LIMITED|LLP|PARTNERSHIP|ENTERPRISES|& SONS)$/.test(n) && !a.sole && a.cust!=='sole_gst') n+=' PRIVATE LIMITED';
   return n;
 }
 function kycDoc(kind,a){
@@ -25,7 +25,7 @@ function kycDoc(kind,a){
     '<rect x="10" y="10" width="'+(W-20)+'" height="46" rx="6" fill="#171630"/>'+t(24,39,head,12,700,'#fff')+body+'</svg>';
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
 }
-function kycRoute(){ return S.sel.route||'gst'; }
+function kycRoute(){ return custType(KA())==='sole_nogst'?'aad':'gst'; }
 function kycSecondName(){ return kycRoute()==='gst'?'GST certificate':'Aadhaar'; }
 function kycReadNow(){
   if(S.flow!=='kyc') return; var a=KA();
@@ -37,7 +37,7 @@ function kycReadNow(){
   paintModal();
 }
 function KA(){ var l=lineById(S.sel.line||'')||null; return l?acctOf(l):by(S.data.accounts,S.sel.acct||S.route.id); }
-FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read off the documents. Check the legal name before it is written to the account.':'Upload the PAN card, and the GST certificate — or Aadhaar, where there is no GST.'; },
+FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read off the documents. Check the legal name before it is written to the account.':(kycRoute()==='aad'?'Upload the PAN card and Aadhaar.':'Upload the PAN card and the GST certificate.'); },
   body:function(){ var a=KA(), r=kycRoute();
     if(S.sel.read){
       var pan=(S.sel.pan||'').toUpperCase(), gst=(S.sel.gst||'').toUpperCase(), aad=(S.sel.aad||'');
@@ -56,8 +56,8 @@ FLOWS.kyc={t:'Get the account verified', sub:function(){ return S.sel.read?'Read
       var img=S.sel[k+'img'];
       return field(label, img?'<div class="kycup"><img src="'+img+'" alt="'+esc(label)+'"><div class="kycup-m"><b>'+esc(S.sel[k+'name']||label)+'</b><span class="green">'+ic('circlecheck','ic14')+'Uploaded</span><button type="button" class="quiet" data-kycclear="'+k+'">Replace</button></div></div>'
         : '<label class="pdrop sm" for="f_'+k+'"><input type="file" id="f_'+k+'" accept="image/png,image/jpeg,application/pdf" data-kycup="'+k+'" hidden>'+ic('upload','ic20')+'<b>Upload the '+esc(label.toLowerCase())+'</b><span>'+esc(hint)+'</span></label>', img?'':hint); };
-    return '<div class="field"><div class="lbl">Second document</div>'+seg('route',[['gst','GST certificate'],['aad','Aadhaar — no GST']],'gst')+
-        '<div class="hint">'+esc(r==='gst'?'A registered business. PAN is checked against the PAN inside the GSTIN.':'A proprietor with no GST registration. Aadhaar stands in for the registration certificate.')+'</div></div>'+
+    return '<div class="field"><div class="lbl">Second document</div><div><b>'+esc(r==='gst'?'GST certificate':'Aadhaar')+'</b> <span class="meta">· '+esc(CUST_LAB[custType(a)])+'</span></div>'+
+        '<div class="hint">'+esc(r==='gst'?'Set by the customer type. PAN is checked against the PAN inside the GSTIN.':'Set by the customer type. Aadhaar stands in for the registration certificate.')+(a.prov?' To change it, edit the customer type on the account.':'')+'</div></div>'+
       up('pan','PAN card','An image or a PDF of the card')+
       up('doc',kycSecondName(),r==='gst'?'Form GST REG-06':'The proprietor’s Aadhaar')+
       note('blue','','Both documents are read by OCR — the numbers, and the legal name on the PAN.')+

@@ -131,3 +131,5 @@ navFor=(function(n0){ return function(u){ var r=n0(u)||[]; if(u&&u.role!=='admin
 ['rules','rulecfg','rulesim','rule'].forEach(function(k){ var f=SCREENS[k]; if(!f) return; SCREENS[k]=function(){ var u=me(); if(!u||u.role!=='admin') return {sc:'Tasks',html:empty('settings','Tasks are set up by the administrator','Every task — pre-sales, sales and post-sales — is created and managed in Masters → Task configurator.'),cta:''}; return f.apply(this,arguments); }; });
 })();
 
+
+/* ==== Customer type (v75.32) ==== */

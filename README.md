@@ -47,7 +47,7 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, forty-seven JS modules, repo fixes
+app/            the source — one stylesheet fragment, forty-eight JS modules, repo fixes
 build.mjs       concatenates app/ into public/index.html
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          smoke.js (assertions) and shots.js (screenshots)
@@ -86,6 +86,7 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `36`–`41` | ABM pre-sales — prospect calls and email, tasks, the glue into BimaSetu, configurator stages, the ABM pool and team |
 | `42-rm-allocation.js` | RM allocation master — editable, live at Payment Completed |
 | `43-users-master.js` | Users master and reporting lines |
+| `44-customer-type.js` | Customer type at creation — sole proprietor? has GST? — which decides GSTIN or Aadhaar and the KYC documents |
 | `99-boot.js` | Boot |
 | `repo-fixes.css`, `repo-fixes.js` | Fixes applied on top of the prototype — see *Repo fixes* below |
 
