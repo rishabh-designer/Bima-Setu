@@ -1,10 +1,10 @@
-# BimaSetu CRM — what changed v73 → v75 (and 27, 29 and 30 Oct)
+# BimaSetu CRM — what changed v73 → v76
 
 > **Derived, not official.** No changelog document was supplied for these versions. This summary is
 > taken from the prototype's own build notes and the `[stated …]` comments at the top of each new
-> section of code (artifact versions `1793105277-a808`, `1793276861-8b77` for 29 Oct and
-> `1793365270-585f` for 30 Oct; storage key `bksales.v25`). Replace it with the official changelog when
-> there is one.
+> section of code (artifact versions `1793105277-a808`, `1793276861-8b77` for 29 Oct,
+> `1793365270-585f` for 30 Oct and `1793372188-5166` for v76; storage key `bksales.v25`, `bksales.v26`
+> from v76). Replace it with the official changelog when there is one.
 
 ## v74 — 23 Oct 2026: the amendments after v73
 Code: `app/24-v74.js` to `app/33-v74-seed.js`.
@@ -90,6 +90,26 @@ Code: `app/36-abm-call-email.js` to `app/41-abm-team.js`.
 - At Payment Completed an ABM is assigned to the account with the RM (the sourcing ABM, else round robin).
 - Admin › Masters › ABM assignment: the round-robin pool and the ABM team.
 
+## v76 — 30 Oct 2026: the investor demo
+Code: `app/45-investor-demo.js` and `app/46-investor-demo-fill.js` (left out by `node build.mjs --full`).
+The deployed link is this demo.
+
+- **Two cases, walked live from pre-sales:** Sharma Industries — Workmen's Compensation (DUA) and
+  Northgate Systems — Cyber Liability (Non-DUA). The page starts with no accounts or opportunities, just
+  these two prospects with Arjun.
+- **A small cast:** Arjun (ABM) and Kavya (ABM manager), Nikhil (Sales) and Vikram (his manager), Priya
+  (RM) and Meera (Head of RM), and Admin. Every product routes to Nikhil; Priya is the only RM owner, and
+  both customers fall in the RM band so the RM rule — not the fallback — picks her.
+- **The hand-off fills in what BimaKavach already knows** about the company: trade name, city,
+  industry, profile and financials.
+- **Fill sample data:** every pop-up that needs typing or an upload has a button that fills it with demo
+  values; the presenter checks it and presses the pop-up's own button. The RFQ form and *Raise a
+  request* have the same button inline.
+- **Happy path only:** the exception simulators (queries, declines, no-answer calls, PAN mismatch,
+  follow-ups) are hidden.
+- **The Cyber QCR's cover terms read as cyber** (breach response, ransomware, social engineering).
+- The storage key moves to `bksales.v26`, so a browser that opened the link before starts fresh.
+
 ## Found while porting
 - **Repo fixes still applied** (`app/repo-fixes.css`, `app/repo-fixes.js`; see the README): Compliance
   buttons clipped below about 1400 px; Admin blocked from renewal opportunities. The prototype fixed
@@ -97,6 +117,12 @@ Code: `app/36-abm-call-email.js` to `app/41-abm-team.js`.
 - **Not fixed — reported:** an instant-route opportunity on a provisional account waits at KYC Details
   Requested (stage 9) with an empty next-action card, so it offers no *Get verified*. `cholaSalesNext()`
   covers stages 10–11 only. KYC can still be completed from Account 360, and the opportunity then moves on.
+  **In the v76 investor demo this is on the main path:** Sharma's WC opportunity is confirmed on
+  Cholamandalam while the account is still provisional, so it stops at stage 9 with an empty card. The
+  presenter has to go to Accounts → Sharma Industries → *Get verified* → *Use sample documents*.
 - **Not fixed — reported (30 Oct):** when a provisional account's customer type is edited from *Sole
   proprietor · no GST* to *has GST*, KYC asks for the GST certificate but the Compliance tab still lists
   Aadhaar as the identity document, because that list keys off the Aadhaar number already on the account.
+- **Not fixed — reported (v76):** the payment-proof sample note names Sharma's contact ("Rahul Mehta is the
+  decision maker; plant HR handles worker additions") on every case. Only Northgate's journey uses the
+  proof step, so the note always names the wrong person there.

@@ -1,7 +1,7 @@
 const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
-  await page.goto('file://' + require('path').resolve(__dirname, '../public/index.html') + ''); await page.waitForTimeout(300);
+  await page.goto('file://' + require('path').resolve(__dirname, 'full.html') + '');   // node build.mjs --full await page.waitForTimeout(300);
   const shot = async (n) => { await page.waitForTimeout(150); await page.screenshot({ path: require('path').resolve(__dirname, '../shots/') + '/' + n + '.png', fullPage: false }); };
   await shot('00-signin');
   await page.click('[data-signin="nikhil"]'); await shot('01-home');

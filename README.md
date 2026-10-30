@@ -7,6 +7,13 @@ held in the browser, and every screen is re-derived from it.
 **Every company, person, PAN, GSTIN, premium, quote and insurer reply in this
 prototype is invented.** There is no real customer data in this repository.
 
+**The deployed link is the investor demo (v76).** It starts with a cast of seven,
+an empty book and two prospects to walk live — Sharma Industries (Workmen's
+Compensation, DUA) and Northgate Systems (Cyber Liability, Non-DUA) — with a
+*Fill sample data* button on every form and the exception simulators hidden.
+The full prototype, with nine people and its sample records, is the same code
+without the two `*-investor-demo*.js` modules: `node build.mjs --full`.
+
 ---
 
 ## Running it
@@ -14,7 +21,8 @@ prototype is invented.** There is no real customer data in this repository.
 The prototype is one self-contained HTML page with no runtime dependencies.
 
 ```bash
-node build.mjs          # -> public/index.html
+node build.mjs          # -> public/index.html  (the investor demo, as deployed)
+node build.mjs --full   # -> tests/full.html    (the full prototype)
 open public/index.html  # or just double-click it
 ```
 
@@ -25,11 +33,19 @@ That is the whole build. There is no bundler, no framework and no install step.
 ```bash
 npm install                        # playwright, for the tests only
 npx playwright install chromium
-npm test                           # build, then the clickable smoke tests
-npm run shots                      # build, then 27 screenshots into shots/
+npm test                           # build both pages, then both clickable suites
+npm run shots                      # build, then 27 screenshots of the full prototype into shots/
 ```
 
-`npm test` drives the real page in a real browser. It signs in as each person,
+There are two suites. `tests/demo.js` drives the deployed page, the investor
+demo: it takes both prospects from Arjun's first call through the hand-off and
+Nikhil's selling to an issued policy (Sharma's WC through Cholamandalam's instant
+link, Northgate's Cyber through the RFQ, placement and the Ops payment ticket),
+fills every typed pop-up with *Fill sample data*, checks that the exception
+simulators stay hidden and that Priya is allocated by the RM rule, then walks
+every screen for the seven and checks Reset.
+
+`tests/smoke.js` drives the full prototype (`tests/full.html`). It signs in as each person,
 takes the Workmen's Compensation line through Cholamandalam's real-time
 issuance (and the assisted and provisional-account variants), takes the Cyber
 line through its band-chosen RFQ to placement, pays two same-insurer
@@ -47,10 +63,10 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, forty-eight JS modules, repo fixes
-build.mjs       concatenates app/ into public/index.html
+app/            the source — one stylesheet fragment, fifty JS modules, repo fixes
+build.mjs       concatenates app/ into public/index.html (or, with --full, tests/full.html)
 public/         the built page (committed, and rebuilt on every deploy)
-tests/          smoke.js (assertions) and shots.js (screenshots)
+tests/          demo.js and smoke.js (assertions), shots.js (screenshots)
 docs/           the changelog, and what every version changed and why
 vercel.json     the deploy configuration
 ```
@@ -87,6 +103,8 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `42-rm-allocation.js` | RM allocation master — editable, live at Payment Completed |
 | `43-users-master.js` | Users master and reporting lines |
 | `44-customer-type.js` | Customer type at creation — sole proprietor? has GST? — which decides GSTIN or Aadhaar and the KYC documents |
+| `45-investor-demo.js` | v76 investor demo — the cast of seven, the two prospects, what the hand-off pre-fills, routing to Nikhil and Priya (left out by `--full`) |
+| `46-investor-demo-fill.js` | v76 investor demo — *Fill sample data* on every form, the hidden exception simulators, the Cyber QCR's cover terms (left out by `--full`) |
 | `99-boot.js` | Boot |
 | `repo-fixes.css`, `repo-fixes.js` | Fixes applied on top of the prototype — see *Repo fixes* below |
 
@@ -103,7 +121,9 @@ first — is the dependency order. Everything shares one scope — there are no 
 ### State
 
 Everything is remembered in the browser under `localStorage`, key
-`bksales.v25`. **Reset** in the sidebar returns to the seed. The clock is fixed
+`bksales.v26` (v76 moved it from `bksales.v25`, so anyone who opened the link
+before starts fresh). **Reset** in the sidebar returns to the seed — on the
+deployed page, the demo's two prospects. The clock is fixed
 at Mon 21 Sep 2026, 11:00 and only moves through *Prototype controls* or the
 rule simulator; when it moves, every scheduled rule check between then and the
 target runs.
@@ -124,7 +144,8 @@ never overwrites: `build.mjs` adds `app/repo-fixes.css` after the stylesheet and
   also refused Admin every account; the prototype fixed that part in v75.)
 
 After each port, check whether the prototype now carries a fix and delete it
-here if so. The smoke tests cover both.
+here if so. The smoke tests cover both, and the demo walk-through checks the
+Compliance buttons too.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "bimasetu-crm-prototype",
-  "version": "75.2.0",
+  "version": "76.0.0",
   "private": true,
   "description": "BimaSetu CRM — a clickable prototype of the BimaKavach sales and relationship-management interface.",
   "type": "module",
@@ -9,8 +9,8 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "test": "node build.mjs && node tests/smoke.js",
-    "shots": "node build.mjs && node tests/shots.js"
+    "test": "node build.mjs && node build.mjs --full && node tests/smoke.js && node tests/demo.js",
+    "shots": "node build.mjs --full && node tests/shots.js"
   },
   "devDependencies": {
     "playwright": "^1.48.0"

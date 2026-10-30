@@ -33,3 +33,5 @@ FLOWS.custEdit={t:'Customer type', sub:'Decides the documents KYC asks for. It c
     var ok=write(function(){ a.cust=now; a.sole=now==='sole_nogst'?1:0; acctLog(a,'Customer type changed: '+CUST_LAB[was]+' → '+CUST_LAB[now],uname(S.user)+' · KYC now asks for '+(now==='sole_nogst'?'PAN and Aadhaar':'PAN and GST')); },'the customer type');
     if(!ok) return 'fail'; toast('Customer type saved',CUST_LAB[now]); }};
 
+
+/* ==== Investor demo (v76) ==== */

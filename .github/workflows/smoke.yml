@@ -1,8 +1,9 @@
 name: smoke
 
-# Builds the page and runs the clickable smoke tests on every push and pull
-# request. Vercel deploys independently of this; a red run here does not block
-# a deploy, so treat a failure as "the prototype broke", not "the site is down".
+# Builds the deployed page (the investor demo) and the full prototype, and runs
+# the clickable tests on both on every push and pull request. Vercel deploys
+# independently of this; a red run here does not block a deploy, so treat a
+# failure as "the prototype broke", not "the site is down".
 on:
   push:
     branches: [main]
@@ -26,7 +27,12 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Build
-        run: node build.mjs
+        run: |
+          node build.mjs
+          node build.mjs --full
 
-      - name: Smoke tests
+      - name: Smoke tests (the full prototype)
         run: node tests/smoke.js
+
+      - name: Investor demo walk-through (the deployed page)
+        run: node tests/demo.js

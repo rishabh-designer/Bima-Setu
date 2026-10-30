@@ -1,8 +1,10 @@
 const { chromium } = require('playwright');
 /*
- * Smoke tests for the v75 prototype. Drives the built page in a real browser:
+ * Smoke tests for the full prototype (tests/full.html, built by `node build.mjs
+ * --full`, i.e. without the v76 investor-demo layer; tests/demo.js covers that).
+ * Drives the page in a real browser:
  * every person, every screen and tab, and the flows v48–v75 added or changed
- * (docs/changelog-v48-v64.md, -v64-v73.md, -v73-v75.md), plus the repo fixes in
+ * (docs/changelog-v48-v64.md, -v64-v73.md, -v73-v76.md), plus the repo fixes in
  * app/repo-fixes.*. The seed is reset between scenarios, so each one starts from
  * the same records. Stage numbers follow the v73 spine (15 stages).
  */
@@ -14,7 +16,8 @@ const { chromium } = require('playwright');
   page.on('console', m => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   const log = (...a) => console.log(...a);
   const fail = (m) => { console.log('FAIL', m); process.exitCode = 1; };
-  await page.goto('file://' + require('path').resolve(__dirname, '../public/index.html'));
+  // the full prototype, built without the investor-demo layer by `node build.mjs --full`
+  await page.goto('file://' + require('path').resolve(__dirname, 'full.html'));
   await page.waitForTimeout(300);
   const txt = async () => page.evaluate(() => ['app','ovl','toasts'].map(id => (document.getElementById(id)||{}).innerText||'').join(' '));
   const click = async (sel) => { const el = await page.$(sel); if (!el) { fail('missing ' + sel); return false; } try { await el.click({ timeout: 4000 }); } catch (e) { fail('click ' + sel + ': ' + e.message.replace(/\n/g,' | ')); return false; } await page.waitForTimeout(120); return true; };

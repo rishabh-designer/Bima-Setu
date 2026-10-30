@@ -3,11 +3,16 @@
  * Builds the prototype.
  *
  * The app is written as numbered modules in app/ — one stylesheet fragment and
- * forty-eight JavaScript modules, concatenated in filename order into a single
+ * fifty JavaScript modules, concatenated in filename order into a single
  * self-contained page. There is no bundler and there are no dependencies: the
  * order of the filenames IS the dependency order.
  *
- *   node build.mjs          -> public/index.html   (the deployed page)
+ *   node build.mjs          -> public/index.html   (the deployed page: the investor demo)
+ *   node build.mjs --full   -> tests/full.html     (the full prototype, for the regression tests)
+ *
+ * --full leaves out the investor-demo modules (app/*-investor-demo*.js), which only
+ * layer on top of the prototype: they reseed it with two cases and a small cast,
+ * hide the exception simulators and add Fill sample data buttons.
  *
  * Vercel runs this on every push; see vercel.json.
  */
@@ -17,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const appDir = join(root, 'app');
-const outDir = join(root, 'public');
+const full = process.argv.includes('--full');
+const outFile = full ? join(root, 'tests', 'full.html') : join(root, 'public', 'index.html');
 
 const head = readFileSync(join(appDir, '01-css.html'), 'utf8');
 
@@ -31,6 +37,7 @@ const fixJs = readIf('repo-fixes.js');
 
 const modules = readdirSync(appDir)
   .filter((f) => /^\d\d-.*\.js$/.test(f))
+  .filter((f) => !(full && f.includes('investor-demo')))
   .sort();
 
 const js = modules.map((f) => readFileSync(join(appDir, f), 'utf8')).join('\n') + (fixJs ? '\n' + fixJs : '');
@@ -62,8 +69,8 @@ ${js}
 </html>
 `;
 
-mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, 'index.html'), page, 'utf8');
+mkdirSync(dirname(outFile), { recursive: true });
+writeFileSync(outFile, page, 'utf8');
 
 const kb = Math.round(Buffer.byteLength(page) / 1024);
-console.log(`built public/index.html — ${modules.length} modules${fixCss || fixJs ? ' + repo fixes' : ''}, ${kb} KB, ${page.split('\n').length} lines`);
+console.log(`built ${full ? 'tests/full.html' : 'public/index.html'} — ${modules.length} modules${fixCss || fixJs ? ' + repo fixes' : ''}, ${kb} KB, ${page.split('\n').length} lines`);
