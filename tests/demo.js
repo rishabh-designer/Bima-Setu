@@ -5,7 +5,10 @@ const { chromium } = require('playwright');
  *   Sharma Industries — Workmen's Compensation (DUA, Cholamandalam instant)
  *   Northgate Systems — Cyber Liability (Non-DUA: RFQ → placement → Ops)
  * Every typed pop-up on the way is filled with its "Fill sample data" button,
- * and the exception simulators the demo hides must stay hidden. The full
+ * and the exception simulators the demo hides must stay hidden. On the way it
+ * checks the v76.1–v76.2 re-quote: prices follow the captured details, stale
+ * rater quotes, Change details and re-quote (QCR v2), and Non-DUA Revise with a
+ * changed cover (docs/changelog-v76-v76.2.md). The full
  * prototype underneath is covered by smoke.js (node build.mjs --full).
  */
 (async () => {
@@ -20,6 +23,7 @@ const { chromium } = require('playwright');
   await page.waitForTimeout(300);
   const txt = async () => page.evaluate(() => ['app','ovl','toasts'].map(id => (document.getElementById(id)||{}).innerText||'').join(' '));
   const click = async (sel) => { const el = await page.$(sel); if (!el) { fail('missing ' + sel); return false; } try { await el.click({ timeout: 4000 }); } catch (e) { fail('click ' + sel + ': ' + e.message.replace(/\n/g,' | ')); return false; } await page.waitForTimeout(120); return true; };
+  const fill = async (sel, v) => { await page.fill(sel, v); await page.dispatchEvent(sel, 'change'); await page.waitForTimeout(60); };
   const pick = async (sel, v) => { await page.selectOption(sel, v); await page.waitForTimeout(60); };
   const has = async (s) => (await txt()).includes(s);
   const expect = async (s, ctx) => { if (!(await has(s))) fail((ctx || '') + ' expected text: ' + s); };
@@ -29,6 +33,9 @@ const { chromium } = require('playwright');
   const openLine = async (id) => { await page.evaluate((id) => go('line', { id }), id); await page.waitForTimeout(100); };
   const commit = () => click('#ovl [data-commit]');
   const waitOvl = async (re, ctx) => page.waitForFunction((s) => new RegExp(s).test(document.getElementById('ovl').innerText), re, { timeout: 5000 }).catch(() => fail(ctx));
+  const ovlTitle = () => page.evaluate(() => { const o = document.getElementById('ovl'); return o.hidden ? '' : ((o.querySelector('.modh .t') || {}).innerText || ''); });
+  const qcrText = async (v) => { await click(`#app [data-qcrview="${v}"]`); const t = await page.$eval('#qview', e => e.innerText.replace(/\s+/g, ' ')).catch(() => ''); await page.evaluate(() => qvClose()); return t; };
+  const logHas = (id, re) => page.evaluate(([id, re]) => (lineById(id).log || []).some(e => new RegExp(re).test(e.t)), [id, re]);
   const shot = async (n) => { const dir = require('path').resolve(__dirname, '../shots'); require('fs').mkdirSync(dir, { recursive: true }); await page.screenshot({ path: dir + '/' + n + '.png' }); };
   // the pop-up's own "Fill sample data" button must exist and must make the form ready to submit
   const sample = async (ctx, wait) => {
@@ -97,8 +104,47 @@ const { chromium } = require('playwright');
   if (!/complete discovery/.test(await page.$eval('#ovl [data-commit]', b => b.innerText))) fail('WC requirement: Fill sample data should answer every question');
   await commit();
   await waitOvl('the route is DUA', 'WC: the rater should quote, so the route is DUA'); await noHidden('WC quotes');
-  await commit(); await commit();                                                                        // the QCR picker, then send
-  await expectStage(wc.id, 8, 'WC QCR sent');
+  await expect('₹3,18,400', 'WC: prices follow the details — ICICI Lombard on the demo values [v76.1]');
+  await commit();                                                                                        // the rater's quotes are kept → the QCR picker
+  await page.keyboard.press('Escape'); await openLine(wc.id);                                            // … not sent yet
+  // the requirement changes after the rater priced it: the quotes go out of date [v76.1]
+  await click('.pane [data-flow="disc"]'); await fill('#f_wcnw', '440'); await commit();
+  await openLine(wc.id);
+  await expect('The requirement changed — the quotes are out of date', 'WC: stale quotes next action [v76.1]');
+  await click('[data-uv="quotes"]'); await expect('Out of date.', 'WC: the RFQ & quotes tab flags the rater quotes [v76.1]'); await click('[data-uv="overview"]');
+  const qcrBlocked = await page.evaluate((id) => { openFlow('qcr', { line: id }); const c = document.querySelector('#ovl [data-commit]'); const r = !!c && c.disabled; closeFlow(); return r; }, wc.id);
+  if (!qcrBlocked) fail('WC: the QCR should not go out on out-of-date quotes [v76.1]');
+  await click('.na [data-flow="rqFetch"]');
+  const wasNow = await page.$$eval('#ovl tbody tr', r => r.map(x => x.innerText.replace(/\s+/g, ' ')).join(' | '));
+  if (!wasNow.includes('ICICI Lombard ₹3,18,400 ₹3,33,700')) fail('WC: Get fresh quotes should show was and now for each insurer, got ' + wasNow);
+  await commit();                                                                                        // fresh quotes → the QCR picker
+  await commit();                                                                                        // send QCR v1
+  await expectStage(wc.id, 8, 'WC QCR v1 sent');
+  // the client wants something different: Change details and re-quote, no reason asked [v76.1–v76.2]
+  for (const where of ['.na', '.pane']) if (!(await page.$(`${where} [data-flow="rqChange"]`))) fail(`WC: Change details and re-quote should be offered in ${where === '.na' ? 'the next action' : 'the Requirement section'} at Quote Sent`);
+  await click('.na [data-flow="rqChange"]');
+  if ((await ovlTitle()) !== 'Change details and re-quote') fail('WC: the next action should open Change details and re-quote');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+  // … and so does a follow-up where the client asked for changes [v76.1]
+  await click('.na [data-flow="qfollow"]'); await click('#ovl [data-mset="fr"][data-mval="changes"]'); await commit();
+  if ((await ovlTitle()) !== 'Change details and re-quote') fail('WC: Follow up → Asked for changes should open Change details and re-quote, got ' + (await ovlTitle() || 'nothing'));
+  await sample('re-quote');
+  if ((await page.$eval('#f_wcnw', e => e.value)) !== '540') fail('WC re-quote: Fill sample data should add 100 workers');
+  await commit();                                                                                        // Save and re-quote
+  await waitOvl('Select quotes and send the QCR', 'WC: saving the change should run the rater and open quote selection');
+  await expectStage(wc.id, 3, 'WC re-quote → back to Details Captured');
+  await expect('₹4,09,450', 'WC: round 2 is priced on the changed details');
+  await commit();                                                                                        // send QCR v2
+  await expectStage(wc.id, 8, 'WC QCR v2 sent');
+  if ((await page.evaluate((id) => lineById(id).round, wc.id)) !== 2) fail('WC: the re-quote should go out as QCR v2');
+  if (!(await logHas(wc.id, '^Details changed after QCR v1')) || !(await logHas(wc.id, '^Fresh quotes from the rater — round 2 on the changed details'))) fail('WC: the activity log should record the change and the fresh quotes');
+  await shot('demo-05-wc-qcr-v2');
+  // each QCR version keeps the prices and details it was quoted on
+  await click('[data-uv="quotes"]');
+  const v1 = await qcrText(1), v2 = await qcrText(2);
+  if (!v1.includes('QCR v1') || !v1.includes('₹3,33,700') || !v1.includes('₹11,61,60,000 annual wages')) fail('WC: QCR v1 should keep its own premiums and sum insured');
+  if (!v2.includes('QCR v2') || !v2.includes('₹4,09,450') || !v2.includes('₹14,25,60,000 annual wages')) fail('WC: QCR v2 should show the re-quoted premiums and sum insured');
+  await click('[data-uv="overview"]');
   await click('.na [data-flow="confirm"]'); await click('#ovl [data-pick*="Cholamandalam"]'); await commit();
   await expectStage(wc.id, 9, 'WC confirmed on a provisional account → KYC Details Requested');
   // the instant route's stage-9 card is empty in the prototype (reported); KYC is done from the account
@@ -148,8 +194,21 @@ const { chromium } = require('playwright');
   await click('.na [data-rfqact="qcr"]');
   const qv = await page.$eval('#qview', e => e.innerText).catch(() => '');
   for (const s of ['First-party and third-party cyber loss', 'Ransomware']) if (!qv.includes(s)) fail('Cyber QCR should carry cyber cover terms: missing ' + s);
+  if (!qv.includes('₹3,05,900')) fail('Cyber QCR v1: New India should be ₹3,05,900 on ₹10 Cr');
+  await page.evaluate(() => qvClose());
+  // the client now needs ₹15 Cr: Revise with a changed cover reopens the requirement, and placement re-prices [v76.1]
+  await click('[data-uv="overview"]'); await click('#app [data-flow="objectQcr"]'); await click('#ovl [data-pick="us"]');   // Revise sits on the Overview
+  await pick('#f_ask', 'Changed sum insured or cover'); await fill('#f_x', 'Client now needs ₹15 Cr of cover'); await commit();
+  await waitOvl('Capture requirement', 'Cyber: Revise with a changed cover should open the requirement form');
+  await fill('#f_cybcov', '₹15 Cr'); await commit();
+  await expectStage(cy.id, 6, 'Cyber revision v2 with placement');
+  await click('[data-sim="extPlc"]');
+  await expectStage(cy.id, 7, 'Cyber round 2 in');
+  await click('.na [data-rfqact="qcr"]');
+  const qv2 = await page.$eval('#qview', e => e.innerText).catch(() => '');
+  if (!/QCR v2/.test(qv2) || !qv2.includes('₹4,23,050') || !qv2.includes('₹15 Cr')) fail('Cyber QCR v2: placement should price New India at ₹4,23,050 on ₹15 Cr');
   await click('#qview [data-qvsend]');
-  await expectStage(cy.id, 8, 'Cyber QCR sent');
+  await expectStage(cy.id, 8, 'Cyber QCR v2 sent');
   await click('.na [data-flow="confirm"]'); await click('#ovl [data-pick="New India Assurance"]'); await commit();
   await expectStage(cy.id, 9, 'Cyber confirmed on a provisional account → KYC Details Requested');
   await click('.na [data-flow="kyc"]'); await verifyKyc();

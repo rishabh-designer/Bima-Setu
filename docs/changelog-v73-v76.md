@@ -110,6 +110,11 @@ The deployed link is this demo.
 - **The Cyber QCR's cover terms read as cyber** (breach response, ransomware, social engineering).
 - The storage key moves to `bksales.v26`, so a browser that opened the link before starts fresh.
 
+## v76.1–v76.2 — 17 Nov 2026: change details and re-quote
+Official changelog: [`changelog-v76-v76.2.md`](changelog-v76-v76.2.md). Code: `app/44-requote.js`, plus
+`SIMFILL.rqChange` in `app/46-investor-demo-fill.js`. Ported from the `index.html` sent with that
+changelog (prototype Version 127); storage key unchanged.
+
 ## Found while porting
 - **Repo fixes still applied** (`app/repo-fixes.css`, `app/repo-fixes.js`; see the README): Compliance
   buttons clipped below about 1400 px; Admin blocked from renewal opportunities. The prototype fixed
@@ -123,6 +128,14 @@ The deployed link is this demo.
 - **Not fixed — reported (30 Oct):** when a provisional account's customer type is edited from *Sole
   proprietor · no GST* to *has GST*, KYC asks for the GST certificate but the Compliance tab still lists
   Aadhaar as the identity document, because that list keys off the Aadhaar number already on the account.
+- **Not fixed — reported (v76.2):** on a DUA opportunity at Quote Sent the next-action card shows at most
+  three buttons, and *Change details and re-quote* now takes the second slot, so *Client rejected every
+  quote* (switch to the RFQ route) no longer appears anywhere. *Follow up → Asked for changes*, which used
+  to open it, now opens the re-quote form — and its label still says "Opens the reject-all form".
+- **Minor (v76.2):** the *Get fresh quotes* was/now table leaves out Cholamandalam (it lists only the
+  rater's base insurers); the stale-quotes banner already shows the new sum insured beside the old
+  premiums; and on Northgate's Revise the requirement form's *Fill sample data* restores ₹10 Cr — the
+  ₹15 Cr sample belongs to the DUA re-quote form, which a Non-DUA line never opens — so ₹15 Cr is typed.
 - **Not fixed — reported (v76):** the payment-proof sample note names Sharma's contact ("Rahul Mehta is the
   decision maker; plant HR handles worker additions") on every case. Only Northgate's journey uses the
   proof step, so the note always names the wrong person there.

@@ -34,4 +34,4 @@ FLOWS.custEdit={t:'Customer type', sub:'Decides the documents KYC asks for. It c
     if(!ok) return 'fail'; toast('Customer type saved',CUST_LAB[now]); }};
 
 
-/* ==== Investor demo (v76) ==== */
+/* ==== Change details and re-quote (v76.1) ==== */

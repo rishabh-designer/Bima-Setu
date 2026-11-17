@@ -43,7 +43,10 @@ Nikhil's selling to an issued policy (Sharma's WC through Cholamandalam's instan
 link, Northgate's Cyber through the RFQ, placement and the Ops payment ticket),
 fills every typed pop-up with *Fill sample data*, checks that the exception
 simulators stay hidden and that Priya is allocated by the RM rule, then walks
-every screen for the seven and checks Reset.
+every screen for the seven and checks Reset. On the way it checks the v76.2
+re-quote: Sharma's quotes go out of date when the requirement changes, *Change
+details and re-quote* sends QCR v2 at the new prices while QCR v1 keeps its own,
+and Northgate's Revise for ₹15 Cr of cover brings placement back at ₹4,23,050.
 
 `tests/smoke.js` drives the full prototype (`tests/full.html`). It signs in as each person,
 takes the Workmen's Compensation line through Cholamandalam's real-time
@@ -63,7 +66,7 @@ access, so it sees neither.
 ## How the code is arranged
 
 ```
-app/            the source — one stylesheet fragment, fifty JS modules, repo fixes
+app/            the source — one stylesheet fragment, fifty-one JS modules, repo fixes
 build.mjs       concatenates app/ into public/index.html (or, with --full, tests/full.html)
 public/         the built page (committed, and rebuilt on every deploy)
 tests/          demo.js and smoke.js (assertions), shots.js (screenshots)
@@ -103,6 +106,7 @@ first — is the dependency order. Everything shares one scope — there are no 
 | `42-rm-allocation.js` | RM allocation master — editable, live at Payment Completed |
 | `43-users-master.js` | Users master and reporting lines |
 | `44-customer-type.js` | Customer type at creation — sole proprietor? has GST? — which decides GSTIN or Aadhaar and the KYC documents |
+| `44-requote.js` | v76.1–v76.2 — prices follow the captured details, stale rater quotes, *Change details and re-quote* (DUA) and Revise with a changed cover (Non-DUA) |
 | `45-investor-demo.js` | v76 investor demo — the cast of seven, the two prospects, what the hand-off pre-fills, routing to Nikhil and Priya (left out by `--full`) |
 | `46-investor-demo-fill.js` | v76 investor demo — *Fill sample data* on every form, the hidden exception simulators, the Cyber QCR's cover terms (left out by `--full`) |
 | `99-boot.js` | Boot |

@@ -109,4 +109,8 @@ var DM_CYBER_TERMS={cov:'First-party and third-party cyber loss — breach respo
   exc:['Prior known incidents','Infrastructure (power, telecom) failure','Bodily injury and property damage'],
   ded:['₹5,00,000 each claim','₹7,50,000 each claim','₹10,00,000 each claim']};
 qvHtml=(function(q0){ return function(l){ if(l&&l.product==='Cyber Liability'){ var was=QCR_TERMS.liab; QCR_TERMS.liab=DM_CYBER_TERMS; try{ return q0.apply(this,arguments); } finally { QCR_TERMS.liab=was; } } return q0.apply(this,arguments); }; })(qvHtml);
+/* change details and re-quote: the client changes one number */
+SIMFILL.rqChange={fill:function(){ var l=dmLine(); if(!l) return; var r=l.req||{};
+  if(l.product===WC_PRODUCT){ S.sel.wcnw=String((+String(r.wcnw||'420').replace(/\D/g,'')||420)+100); }
+  else { S.sel.cybcov='₹15 Cr'; } }};
 
