@@ -147,6 +147,12 @@ never overwrites: `build.mjs` adds `app/repo-fixes.css` after the stylesheet and
   lets Admin open them; every other role keeps the prototype's own check. (v73
   also refused Admin every account; the prototype fixed that part in v75.)
 
+- **No "Incumbent insurer" or "Policy expiry date"** (asked for on 17 Nov, not
+  yet in the prototype). `repo-fixes.js` takes the two questions out of the
+  requirement templates, so the Fire, Burglary, IAR, CAR, Marine, Liability and
+  Group Health requirement keeps *Existing policy?* only — on the form, in the
+  Requirement section and in the completeness count.
+
 After each port, check whether the prototype now carries a fix and delete it
 here if so. The smoke tests cover both, and the demo walk-through checks the
 Compliance buttons too.
